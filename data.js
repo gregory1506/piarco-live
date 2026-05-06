@@ -1043,9 +1043,9 @@ window.FLIGHTS = [
   { id:'KL771', airline:'KLM', type:'A333', origin:'AMS', dest:'POS', status:'enroute', eta:'15:20', dep:'05:40', gate:'12', lat:12.88, lon:-59.40, alt:38000, spd:496, hdg:226, track:'cruise', dist:320, delay:14, routeProgress:0.89 },
   { id:'BW485', airline:'Caribbean Wings', type:'B738', origin:'POS', dest:'JFK', status:'scheduled', eta:'21:05', dep:'15:45', gate:'6', lat:10.595, lon:-61.337, alt:0, spd:0, hdg:0, track:'gate', dist:0, delay:0 },
   { id:'LI377', airline:'LIAT', type:'AT42', origin:'ANU', dest:'POS', status:'enroute', eta:'14:28', dep:'12:55', gate:'4', lat:11.68, lon:-61.10, alt:22000, spd:284, hdg:190, track:'descending', dist:128, delay:0, routeProgress:0.78 },
-  { id:'AV256', airline:'Avianca', type:'A320', origin:'BOG', dest:'POS', status:'enroute', eta:'14:50', dep:'12:20', gate:'10', lat:9.80, lon:-62.70, alt:33000, spd:462, hdg:64, track:'cruise', dist:210, delay:0, routeProgress:0.84 },
+  { id:'BA2157', airline:'British Airways', type:'B789', origin:'LGW', dest:'POS', status:'enroute', eta:'15:12', dep:'03:50', gate:'2', lat:13.20, lon:-60.40, alt:37000, spd:490, hdg:228, track:'descending', dist:190, delay:0, routeProgress:0.88 },
   { id:'BW419', airline:'Caribbean Wings', type:'B738', origin:'POS', dest:'MIA', status:'taxi', eta:'17:10', dep:'14:05', gate:'1', lat:10.604, lon:-61.342, alt:0, spd:14, hdg:280, track:'ground', dist:0, delay:5 },
-  { id:'DL402', airline:'Delta', type:'B739', origin:'ATL', dest:'POS', status:'enroute', eta:'15:02', dep:'11:05', gate:'5', lat:12.55, lon:-63.10, alt:36000, spd:502, hdg:138, track:'cruise', dist:260, delay:0, routeProgress:0.84 },
+  { id:'AC1619', airline:'Air Canada', type:'A220', origin:'YYZ', dest:'POS', status:'enroute', eta:'15:28', dep:'11:15', gate:'5', lat:19.20, lon:-68.50, alt:35000, spd:480, hdg:146, track:'cruise', dist:680, delay:0, routeProgress:0.72 },
   { id:'BW229', airline:'Caribbean Wings', type:'A320', origin:'POS', dest:'GEO', status:'scheduled', eta:'16:30', dep:'15:15', gate:'4', lat:10.595, lon:-61.337, alt:0, spd:0, hdg:0, track:'gate', dist:0, delay:0 },
   { id:'JY311', airline:'InterCaribbean', type:'SF34', origin:'UVF', dest:'POS', status:'enroute', eta:'14:36', dep:'13:10', gate:'3', lat:11.95, lon:-61.25, alt:19000, spd:232, hdg:188, track:'descending', dist:148, delay:22, routeProgress:0.74 },
   { id:'BW800R', airline:'Caribbean Wings', type:'B738', origin:'POS', dest:'LHR', status:'scheduled', eta:'06:25', dep:'17:40', gate:'12', lat:10.595, lon:-61.337, alt:0, spd:0, hdg:0, track:'gate', dist:0, delay:0 },
@@ -1062,6 +1062,6 @@ window.CITIES = {
 
 window.AIRLINE_CODES = {
   'Caribbean Wings':'BW','Caribbean Airlines':'BW','American':'AA','Copa':'CM','Virgin Atlantic':'VS',
-  'United':'UA','KLM':'KL','LIAT':'LI','Avianca':'AV','Delta':'DL','InterCaribbean':'JY',
+  'United':'UA','KLM':'KL','LIAT':'LI','Air Canada':'AC','InterCaribbean':'JY',
   'Island Charter':'9Y','British Airways':'BA','Condor':'DE'
 };
