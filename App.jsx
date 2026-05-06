@@ -75,6 +75,46 @@ function routeTangentAt(origin, control, dest, t) {
   };
 }
 
+// ── OpenSky helpers ──────────────────────────────────────────────────────
+function metersToFeet(m) { return m != null ? Math.round(m * 3.28084) : 0; }
+function msToKnots(ms)   { return ms != null ? Math.round(ms * 1.94384) : 0; }
+
+function openSkyToFlight(sv) {
+  const callsign = (sv[1] || '').trim();
+  const lon      = sv[5];
+  const lat      = sv[6];
+  const altM     = sv[7];
+  const onGround = sv[8];
+  const velMs    = sv[9];
+  const hdg      = sv[10] != null ? sv[10] : 0;
+  const vRateMs  = sv[11] || 0;
+  if (!lat || !lon || !callsign) return null;
+  const altFt = metersToFeet(altM);
+  const spd   = msToKnots(velMs);
+  let track = 'cruise';
+  if (onGround)           track = 'ground';
+  else if (vRateMs < -2)  track = 'descending';
+  else if (vRateMs > 2)   track = 'climbing';
+  const staticMatch = (window.FLIGHTS || []).find(f => (f.id || '').trim() === callsign);
+  return {
+    id: callsign,
+    airline: staticMatch ? staticMatch.airline : (callsign.slice(0,2) || '??'),
+    type:    staticMatch ? staticMatch.type    : '???',
+    origin:  staticMatch ? staticMatch.origin  : '???',
+    dest:    staticMatch ? staticMatch.dest    : '???',
+    status:  onGround ? 'taxi' : 'enroute',
+    eta:     staticMatch ? staticMatch.eta  : '--:--',
+    dep:     staticMatch ? staticMatch.dep  : '--:--',
+    gate:    staticMatch ? staticMatch.gate : '—',
+    lat, lon, alt: altFt, spd, hdg, track,
+    dist:  staticMatch ? staticMatch.dist  : 0,
+    delay: staticMatch ? staticMatch.delay : 0,
+    routeProgress: staticMatch ? staticMatch.routeProgress : (onGround ? 0 : 0.5),
+    _live: true,
+  };
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function routeTargetFor(f) {
   const dest = AIRPORTS[f.dest];
   const origin = AIRPORTS[f.origin];
@@ -124,7 +164,7 @@ function Ticker() {
   );
 }
 
-function Header({ clock }) {
+function Header({ clock, openSkyStatus }) {
   return (
     <div className="header">
       <div className="brand">
@@ -148,8 +188,8 @@ function Header({ clock }) {
         </div>
       </div>
       <div className="header-right">
-        <div className="live-dot"></div>
-        <span>LIVE</span>
+        <div className="live-dot" title={`ADS-B: ${openSkyStatus}`}></div>
+        <span title={`ADS-B: ${openSkyStatus}`}>{openSkyStatus === 'ok' ? 'ADS-B LIVE' : 'LIVE'}</span>
         <span className="mute">·</span>
         <span className="clock mono">{clock}</span>
         <span className="mute">AST</span>
@@ -239,10 +279,35 @@ function App() {
   });
   const [clock, setClock] = useStateA(() => nowClock());
   const [detailOpen, setDetailOpen] = useStateA(true);
+  const [openSkyFlights, setOpenSkyFlights] = useStateA([]);
+  const [openSkyStatus, setOpenSkyStatus] = useStateA('idle');
 
   useEffectA(() => {
     const t = setInterval(() => setClock(nowClock()), 1000);
     return () => clearInterval(t);
+  }, []);
+
+  // Fetch live ADS-B positions from OpenSky Network (no auth required)
+  useEffectA(() => {
+    const BBOX = 'lamin=8.0&lomin=-70&lamax=14.5&lomax=-57';
+    const URL  = 'https://opensky-network.org/api/states/all?' + BBOX;
+    const fetchFlights = () => {
+      setOpenSkyStatus('loading');
+      fetch(URL)
+        .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(data => {
+          const flights = (data.states || []).map(openSkyToFlight).filter(Boolean);
+          setOpenSkyFlights(flights);
+          setOpenSkyStatus('ok');
+        })
+        .catch(err => {
+          console.warn('OpenSky fetch failed:', err);
+          setOpenSkyStatus('error');
+        });
+    };
+    fetchFlights();
+    const i = setInterval(fetchFlights, 60000);
+    return () => clearInterval(i);
   }, []);
 
   // Subtle position drift for airborne aircraft — makes it feel live.
@@ -253,10 +318,23 @@ function App() {
   }, []);
 
   const liveFlights = useMemoA(() => {
-    return FLIGHTS.map(f => {
+    // Build lookup of real-time positions from OpenSky
+    const liveMap = new Map(openSkyFlights.map(f => [f.id, f]));
+    // Update static flights with live ADS-B positions where available
+    const staticIds = new Set((window.FLIGHTS || []).map(f => f.id));
+    const merged = (window.FLIGHTS || []).map(f => {
+      const live = liveMap.get(f.id);
+      if (live && f.status !== 'scheduled' && f.status !== 'landed') {
+        return flightOnRoute({ ...f, lat: live.lat, lon: live.lon, alt: live.alt, spd: live.spd, hdg: live.hdg, track: live.track }, tick, scrub);
+      }
       return flightOnRoute(f, tick, scrub);
-    }).filter(f => tweakState.charter || f.airline !== 'Island Charter');
-  }, [tick, scrub, tweakState.charter]);
+    });
+    // Add any real aircraft in the region not in the static dataset
+    openSkyFlights.forEach(f => {
+      if (!staticIds.has(f.id)) merged.push(flightOnRoute(f, tick, scrub));
+    });
+    return merged.filter(f => tweakState.charter || f.airline !== 'Island Charter');
+  }, [tick, scrub, tweakState.charter, openSkyFlights]);
 
   const toggleWatch = (id) => {
     setWatchlist(w => {
@@ -290,7 +368,7 @@ function App() {
   return (
     <div className="app">
       <Ticker />
-      <Header clock={clock} />
+      <Header clock={clock} openSkyStatus={openSkyStatus} />
       <div className="main">
         <MapCanvas
           flights={liveFlights}
