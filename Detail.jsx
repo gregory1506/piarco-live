@@ -1,7 +1,8 @@
 // Detail.jsx - flight detail drawer
 function DetailDrawer({ flight, onClose }) {
   if (!flight) return <div className="detail closed"></div>;
-  const isArrival = flight.dest === 'POS';
+  const localAirports = window.HOME_AIRPORTS || ['POS'];
+  const isArrival = localAirports.includes(flight.dest);
   const origin = flight.origin;
   const dest = flight.dest;
 
@@ -14,6 +15,7 @@ function DetailDrawer({ flight, onClose }) {
     ['Registration', 'N' + (flight.id.replace(/\D/g,'').padStart(4,'0'))],
     ['Track', flight.track.toUpperCase()],
     ['Delay', flight.delay > 0 ? flight.delay + ' min' : 'On time'],
+    ['Source status', flight.sourceStatus || flight.status.toUpperCase()],
     ['Filed route', `${origin} → ${dest}`],
     ['Flight ID', flight.id],
   ];
@@ -29,7 +31,7 @@ function DetailDrawer({ flight, onClose }) {
       </div>
 
       <div className="route-viz">
-        <div className="rv-port">
+        <div className="rv-airport">
           <div className="code">{origin}</div>
           <div className="name">{CITIES[origin] || ''}</div>
           <div className="tm mono">{flight.dep} LCL</div>
@@ -43,7 +45,7 @@ function DetailDrawer({ flight, onClose }) {
             </svg>
           </span>
         </div>
-        <div className="rv-port" style={{textAlign:'right'}}>
+        <div className="rv-airport" style={{textAlign:'right'}}>
           <div className="code">{dest}</div>
           <div className="name">{CITIES[dest] || ''}</div>
           <div className="tm mono">{flight.eta} LCL</div>

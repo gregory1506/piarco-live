@@ -3,14 +3,18 @@ const { useEffect: useEffectA, useState: useStateA, useMemo: useMemoA, useRef: u
 
 const TICKER = [
   ['ARRIVED', 'BW523 ex JFK', 'On stand G7', 'up'],
-  ['DEP', 'BW800 to YYZ', '14:10 on time', 'up'],
-  ['DELAY', 'KL771 ex AMS', '+14 min', 'down'],
-  ['WX', 'TTPP 24°C · 09kt', 'VIS 10SM', ''],
-  ['NOTAM', 'RWY 10/28', 'normal ops', ''],
+  ['TAB', 'BW1500 ex POS', '06:10 scheduled', 'up'],
+  ['TAB', 'BW1543 to POS', 'landed 00:38', 'up'],
+  ['WX', 'TTPP 24°C · TTCP 26°C', 'VIS 10SM', ''],
+  ['NOTAM', 'TTPP / TTCP', 'normal ops', ''],
   ['ARR', 'CM472 ex PTY', 'ETA 14:18', 'up'],
-  ['DEP', 'BW415 to BGI', 'airborne', 'up'],
-  ['DELAY', 'JY311 ex UVF', '+22 min', 'down'],
+  ['TAB', 'BW1520 ex POS', 'ETA 14:15', 'up'],
+  ['DELAY', 'JY311 ex UVF to POS', '+22 min', 'down'],
 ];
+
+function isHomeAirport(code) {
+  return (window.HOME_AIRPORTS || ['POS']).includes(code);
+}
 
 function bearingBetween(a, b) {
   if (!a || !b) return 0;
@@ -74,7 +78,7 @@ function routeTangentAt(origin, control, dest, t) {
 function routeTargetFor(f) {
   const dest = AIRPORTS[f.dest];
   const origin = AIRPORTS[f.origin];
-  if (f.dest === 'POS') return dest;
+  if (isHomeAirport(f.dest)) return dest;
   return dest || origin || AIRPORTS.POS;
 }
 
@@ -89,13 +93,13 @@ function flightOnRoute(f, tick, scrub) {
   const origin = AIRPORTS[f.origin];
   const dest = routeTargetFor(f);
   if (!origin || !dest) return f;
-  const baseProgress = f.routeProgress ?? (f.alt < 500 ? (f.origin === 'POS' ? 0 : 1) : 0.75);
+  const baseProgress = f.routeProgress ?? (f.alt < 500 ? (isHomeAirport(f.origin) ? 0 : 1) : 0.75);
   const routeNm = distanceNm(origin, dest);
   const minutes = scrub + (tick % 30) * 0.2;
   const progressRate = routeNm > 0 && f.spd > 0 ? f.spd / 60 / routeNm : 0;
   const progress = clamp(baseProgress + minutes * progressRate, 0, 1);
   const control = routeControlPoint(origin, dest);
-  const point = f.alt < 500 ? (f.origin === 'POS' ? origin : dest) : routePointAt(origin, control, dest, progress);
+  const point = f.alt < 500 ? (isHomeAirport(f.origin) ? origin : dest) : routePointAt(origin, control, dest, progress);
   const tangent = routeTangentAt(origin, control, dest, progress);
   const hdg = f.alt < 500 ? routeHeadingFor(f, point) : bearingBetween(point, {
     lat: point.lat + tangent.lat,
@@ -108,7 +112,7 @@ function Ticker() {
   const items = [...TICKER, ...TICKER];
   return (
     <div className="ticker">
-      <div className="ticker-label">TTPP · LIVE</div>
+      <div className="ticker-label">TT AIRPORTS · LIVE</div>
       <div className="ticker-track">
         {items.map((t, i) => (
           <span className="ticker-item" key={i}>
@@ -124,22 +128,23 @@ function Header({ clock }) {
   return (
     <div className="header">
       <div className="brand">
-        <div className="brand-mark">PO</div>
+        <div className="brand-mark">TT</div>
         <div>
-          <div className="brand-title">Piarco Live</div>
-          <div className="brand-sub">TTPP · Port of Spain</div>
+          <div className="brand-title">T&T Flight Board</div>
+          <div className="brand-sub">POS/TTPP · TAB/TTCP</div>
         </div>
       </div>
       <div className="header-center">
         <div className="metar-strip">
-          <span className="tag mono">METAR TTPP</span>
-          <span className="metar-item"><span className="k">Temp</span><span className="v mono">24°C</span></span>
+          <span className="tag mono">METAR TTPP / TTCP</span>
+          <span className="metar-item"><span className="k">POS Temp</span><span className="v mono">24°C</span></span>
+          <span className="metar-item"><span className="k">TAB Temp</span><span className="v mono">26°C</span></span>
           <span className="metar-item"><span className="k">Wind</span><span className="v mono">090° / 09kt</span></span>
           <span className="metar-item"><span className="k">Vis</span><span className="v mono">10SM</span></span>
           <span className="metar-item"><span className="k">Clouds</span><span className="v mono">SCT024</span></span>
           <span className="metar-item"><span className="k">QNH</span><span className="v mono">1014</span></span>
           <span className="metar-item"><span className="k">Dew</span><span className="v mono">21°C</span></span>
-          <span className="metar-item"><span className="k">Rwy</span><span className="v mono">10 active</span></span>
+          <span className="metar-item"><span className="k">Rwy</span><span className="v mono">POS 10 · TAB 11</span></span>
         </div>
       </div>
       <div className="header-right">
@@ -214,10 +219,6 @@ function TweaksPanel({ open, state, setState }) {
       </div>
       <h4 style={{marginTop:10}}>Data</h4>
       <div className="row-t">
-        <span>Include cargo</span>
-        <button className={`toggle ${state.cargo?'on':''}`} onClick={()=>set('cargo', !state.cargo)} />
-      </div>
-      <div className="row-t">
         <span>Include charter</span>
         <button className={`toggle ${state.charter?'on':''}`} onClick={()=>set('charter', !state.charter)} />
       </div>
@@ -234,7 +235,7 @@ function App() {
   const [scrub, setScrub] = useStateA(0);
   const [tweaksOpen, setTweaksOpen] = useStateA(false);
   const [tweakState, setTweakState] = useStateA({
-    mapStyle: 'radar', trails: true, labels: true, density: 'comfy', cargo: false, charter: true
+    mapStyle: 'radar', trails: true, labels: true, density: 'comfy', charter: true
   });
   const [clock, setClock] = useStateA(() => nowClock());
   const [detailOpen, setDetailOpen] = useStateA(true);
@@ -254,7 +255,7 @@ function App() {
   const liveFlights = useMemoA(() => {
     return FLIGHTS.map(f => {
       return flightOnRoute(f, tick, scrub);
-    }).filter(f => tweakState.charter || f.airline !== 'Piarco Charter');
+    }).filter(f => tweakState.charter || f.airline !== 'Island Charter');
   }, [tick, scrub, tweakState.charter]);
 
   const toggleWatch = (id) => {
@@ -270,7 +271,7 @@ function App() {
     setDetailOpen(true);
     // auto-switch board tab to match
     const f = liveFlights.find(x => x.id === id);
-    if (f) setMode(f.dest === 'POS' ? 'arrivals' : 'departures');
+    if (f) setMode(isHomeAirport(f.dest) ? 'arrivals' : 'departures');
   };
 
   const selected = liveFlights.find(f => f.id === selectedId);

@@ -1,7 +1,7 @@
 // MapCanvas.jsx - SVG map with Trinidad outline, radar rings, aircraft sprites
 const { useEffect, useMemo, useRef, useState } = React;
 
-// Simple equirectangular projection centered on Piarco
+// Simple equirectangular projection centered on Trinidad and Tobago
 function makeProjection(center, zoom, w, h) {
   // deg per pixel — baseline ~ 0.004 deg/px at zoom 1
   const basePx = 0.0055;
@@ -26,6 +26,10 @@ const MAX_ZOOM = 8;
 
 function clampMapValue(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function mapIsHomeAirport(code) {
+  return (window.HOME_AIRPORTS || ['POS']).includes(code);
 }
 
 function mapRouteControlPoint(origin, dest) {
@@ -53,43 +57,10 @@ function mapRoutePointAt(origin, control, dest, t) {
   };
 }
 
-function bearingScreen(a, b) {
-  return (Math.atan2(b[0] - a[0], a[1] - b[1]) * 180 / Math.PI + 360) % 360;
-}
-
-function samplePolyline(points, t) {
-  if (!points.length) return null;
-  if (points.length === 1) return points[0];
-  const segments = [];
-  let total = 0;
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i];
-    const b = points[i + 1];
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    segments.push({ a, b, len });
-    total += len;
-  }
-  let remaining = clampMapValue(t, 0, 1) * total;
-  for (const seg of segments) {
-    if (remaining <= seg.len || seg === segments[segments.length - 1]) {
-      const local = seg.len ? remaining / seg.len : 0;
-      return {
-        point: [
-          seg.a[0] + (seg.b[0] - seg.a[0]) * local,
-          seg.a[1] + (seg.b[1] - seg.a[1]) * local
-        ],
-        heading: bearingScreen(seg.a, seg.b)
-      };
-    }
-    remaining -= seg.len;
-  }
-  return null;
-}
-
 function MapCanvas({ flights, selectedId, onSelect, showTrails, mapStyle }) {
   const wrapRef = useRef(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
-  const [center, setCenter] = useState({ lat: PIARCO.lat + 0.4, lon: PIARCO.lon });
+  const [center, setCenter] = useState({ lat: 10.86, lon: -61.08 });
   const [zoom, setZoom] = useState(1);
   const dragRef = useRef(null);
 
@@ -139,14 +110,13 @@ function MapCanvas({ flights, selectedId, onSelect, showTrails, mapStyle }) {
     ...country,
     points: country.polygons.map(toPoints)
   })), [proj]);
-  const seaLanes = useMemo(() => (window.SEA_LANES || []).map(lane => ({
-    ...lane,
-    screenPoints: lane.points.map(([la, lo]) => proj.project(la, lo))
-  })), [proj]);
-
+  const homeAirports = window.HOME_AIRPORTS || ['POS'];
+  const homeAirportMarkers = homeAirports
+    .map(code => ({ code, ...(window.AIRPORT_DETAILS?.[code] || window.AIRPORTS?.[code]) }))
+    .filter(a => typeof a.lat === 'number' && typeof a.lon === 'number');
   const [px, py] = proj.project(PIARCO.lat, PIARCO.lon);
 
-  // Radar rings (at 50, 100, 200 nm from Piarco, ~1 nm ≈ 1/60 deg lat)
+  // Radar rings (at 50, 100, 200 nm from local airports, ~1 nm ≈ 1/60 deg lat)
   const ringRadii = [50, 100, 200, 300]; // nm
   const nmToPx = (nm) => (nm / 60) / proj.scale;
 
@@ -175,15 +145,15 @@ function MapCanvas({ flights, selectedId, onSelect, showTrails, mapStyle }) {
 
   const zoomIn = () => setZoom(z => Math.min(MAX_ZOOM, z * 1.4));
   const zoomOut = () => setZoom(z => Math.max(MIN_ZOOM, z / 1.4));
-  const recenter = () => { setCenter({ lat: PIARCO.lat + 0.4, lon: PIARCO.lon }); setZoom(1); };
+  const recenter = () => { setCenter({ lat: 10.86, lon: -61.08 }); setZoom(0.85); };
   const showAtlantic = () => { setCenter({ lat: 28, lon: -48 }); setZoom(0.05); };
 
   // Stats
   const stats = useMemo(() => {
     const airborne = flights.filter(f => f.alt > 500).length;
     const ground = flights.length - airborne;
-    const inbound = flights.filter(f => f.dest === 'POS').length;
-    const outbound = flights.filter(f => f.origin === 'POS').length;
+    const inbound = flights.filter(f => mapIsHomeAirport(f.dest)).length;
+    const outbound = flights.filter(f => mapIsHomeAirport(f.origin)).length;
     return { airborne, ground, inbound, outbound };
   }, [flights]);
 
@@ -220,15 +190,18 @@ function MapCanvas({ flights, selectedId, onSelect, showTrails, mapStyle }) {
 
         {/* radar rings */}
         <g opacity="0.6">
-          {ringRadii.map(r => (
-            <circle key={r} cx={px} cy={py} r={nmToPx(r)}
-                    fill="none" stroke="#1E2630" strokeWidth="0.6"
-                    strokeDasharray="3 4" />
-          ))}
+          {homeAirportMarkers.map(airport => {
+            const [ax, ay] = proj.project(airport.lat, airport.lon);
+            return ringRadii.map(r => (
+              <circle key={`${airport.code}-${r}`} cx={ax} cy={ay} r={nmToPx(r)}
+                      fill="none" stroke="#1E2630" strokeWidth="0.6"
+                      strokeDasharray="3 4" />
+            ));
+          })}
           {ringRadii.map(r => (
             <text key={'t'+r} x={px + nmToPx(r)} y={py - 3}
                   fontFamily="JetBrains Mono, monospace" fontSize="8.5"
-                  fill="#566470" textAnchor="start">{r} nm</text>
+                  fill="#566470" textAnchor="start">POS {r} nm</text>
           ))}
         </g>
 
@@ -301,64 +274,18 @@ function MapCanvas({ flights, selectedId, onSelect, showTrails, mapStyle }) {
           })}
         </g>
 
-        {/* Piarco marker */}
+        {/* Trinidad and Tobago airport markers */}
         <g>
-          <circle cx={px} cy={py} r="4" fill="oklch(0.75 0.12 190)" />
-          <circle cx={px} cy={py} r="9" fill="none" stroke="oklch(0.75 0.12 190)" strokeWidth="0.8" opacity="0.6" />
-          <text x={px + 10} y={py - 6} fontFamily="JetBrains Mono, monospace" fontSize="10" fill="oklch(0.75 0.12 190)" fontWeight="600">TTPP</text>
-          <text x={px + 10} y={py + 5} fontFamily="JetBrains Mono, monospace" fontSize="8.5" fill="#8A97A3">PIARCO INTL</text>
-        </g>
-
-        {/* Maritime layer: Trinidad/Tobago ports, lanes, and vessels */}
-        <g>
-          {seaLanes.map(lane => (
-            <polyline
-              key={lane.id}
-              points={lane.screenPoints.map(p => p.join(',')).join(' ')}
-              fill="none"
-              stroke="oklch(0.68 0.08 215)"
-              strokeWidth="0.8"
-              strokeDasharray="6 7"
-              opacity="0.45"
-            />
-          ))}
-          {(window.PORTS || []).map(port => {
-            const [portX, portY] = proj.project(port.lat, port.lon);
+          {homeAirportMarkers.map((airport, index) => {
+            const [ax, ay] = proj.project(airport.lat, airport.lon);
+            const labelX = index === 0 ? ax + 10 : ax - 10;
+            const align = index === 0 ? 'start' : 'end';
             return (
-              <g key={port.id}>
-                <rect x={portX - 4} y={portY - 4} width="8" height="8"
-                  fill="#0B0F12" stroke="oklch(0.72 0.09 215)" strokeWidth="1"
-                  transform={`rotate(45 ${portX} ${portY})`} />
-                <text x={portX + 8} y={portY - 6}
-                  fontFamily="JetBrains Mono, monospace" fontSize="7.5"
-                  fill="#5F7080" letterSpacing="0.08em">
-                  {port.name.toUpperCase()}
-                </text>
-              </g>
-            );
-          })}
-          {(window.SHIPS || []).map(ship => {
-            const lane = seaLanes.find(l => l.id === ship.lane);
-            if (!lane) return null;
-            const drift = ((Date.now() / 1000) * 0.00008 * ship.speed) % 1;
-            const sampled = samplePolyline(lane.screenPoints, (ship.progress + drift) % 1);
-            if (!sampled) return null;
-            const [sx, sy] = sampled.point;
-            const color = ship.status === 'arrival' || ship.status === 'inbound'
-              ? 'oklch(0.72 0.09 215)'
-              : ship.type === 'ferry'
-                ? 'oklch(0.78 0.10 150)'
-                : 'oklch(0.70 0.12 75)';
-            return (
-              <g key={ship.id} transform={`translate(${sx},${sy}) rotate(${sampled.heading})`}>
-                <path d="M0,-7 L5,4 L0,7 L-5,4 Z" fill={color} opacity="0.92" />
-                <path d="M0,-7 L0,7" stroke="#071014" strokeWidth="0.8" opacity="0.7" />
-                <circle r="11" fill="transparent" />
-                <text x={10} y={3} transform={`rotate(${-sampled.heading})`}
-                  fontFamily="JetBrains Mono, monospace" fontSize="8"
-                  fill="#7F8D98">
-                  {ship.id}
-                </text>
+              <g key={airport.code}>
+                <circle cx={ax} cy={ay} r="4" fill="oklch(0.75 0.12 190)" />
+                <circle cx={ax} cy={ay} r="9" fill="none" stroke="oklch(0.75 0.12 190)" strokeWidth="0.8" opacity="0.6" />
+                <text x={labelX} y={ay - 6} fontFamily="JetBrains Mono, monospace" fontSize="10" fill="oklch(0.75 0.12 190)" fontWeight="600" textAnchor={align}>{airport.icao}</text>
+                <text x={labelX} y={ay + 5} fontFamily="JetBrains Mono, monospace" fontSize="8.5" fill="#8A97A3" textAnchor={align}>{(airport.name || airport.code).toUpperCase()}</text>
               </g>
             );
           })}
@@ -367,7 +294,7 @@ function MapCanvas({ flights, selectedId, onSelect, showTrails, mapStyle }) {
         {/* Flight trails + aircraft */}
         <g>
           {flights.filter(f => f.alt > 300).map(f => {
-            const target = AIRPORTS[f.dest] || (f.dest === 'POS' ? PIARCO : null);
+            const target = AIRPORTS[f.dest] || (mapIsHomeAirport(f.dest) ? AIRPORTS[f.dest] : null);
             const origin = AIRPORTS[f.origin];
             if (!origin || !target) return null;
             const control = mapRouteControlPoint(origin, target);
@@ -382,7 +309,7 @@ function MapCanvas({ flights, selectedId, onSelect, showTrails, mapStyle }) {
               const pt = mapRoutePointAt(origin, control, target, t);
               flownPoints.push(proj.project(pt.lat, pt.lon).join(','));
             }
-            const isOutb = f.origin === 'POS';
+            const isOutb = mapIsHomeAirport(f.origin);
             const stroke = isOutb ? 'oklch(0.60 0.11 75)' : 'oklch(0.56 0.10 190)';
             return showTrails ? (
               <g key={'tr-'+f.id}>
@@ -406,7 +333,7 @@ function MapCanvas({ flights, selectedId, onSelect, showTrails, mapStyle }) {
           })}
           {flights.map(f => {
             const [fx, fy] = proj.project(f.lat, f.lon);
-            const isOutb = f.origin === 'POS';
+            const isOutb = mapIsHomeAirport(f.origin);
             const isGround = f.alt < 500;
             const isDelay = f.delay >= 15;
             const isSelected = f.id === selectedId;
@@ -429,7 +356,9 @@ function MapCanvas({ flights, selectedId, onSelect, showTrails, mapStyle }) {
                   />
                 )}
                 <circle r="12" className="ac-hit" />
-                <text className="ac-label" x={10} y={3} transform={`rotate(${-f.hdg})`}>{f.id}</text>
+                {(!isGround || isSelected) && (
+                  <text className="ac-label" x={10} y={3} transform={`rotate(${-f.hdg})`}>{f.id}</text>
+                )}
                 {isSelected && (
                   <circle r={14} fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.6" />
                 )}
@@ -443,7 +372,7 @@ function MapCanvas({ flights, selectedId, onSelect, showTrails, mapStyle }) {
       <div className="map-chrome">
         <button className="map-btn" onClick={zoomIn} title="Zoom in">+</button>
         <button className="map-btn" onClick={zoomOut} title="Zoom out">−</button>
-        <button className="map-btn" onClick={recenter} title="Recenter on Piarco" style={{fontSize:11}}>⦿</button>
+        <button className="map-btn" onClick={recenter} title="Recenter on Trinidad and Tobago" style={{fontSize:11}}>⦿</button>
         <button className="map-btn" onClick={showAtlantic} title="Atlantic routes" style={{fontSize:10}}>ATL</button>
       </div>
 
@@ -459,8 +388,6 @@ function MapCanvas({ flights, selectedId, onSelect, showTrails, mapStyle }) {
         <div className="legend-row"><span className="sw sw-outb"></span>Outbound</div>
         <div className="legend-row"><span className="sw sw-delay"></span>Delayed ≥ 15m</div>
         <div className="legend-row"><span className="sw sw-gnd"></span>Ground / gate</div>
-        <div className="legend-row"><span className="sw sw-ship"></span>Ship to/from Trinidad</div>
-        <div className="legend-row"><span className="sw sw-port"></span>Port</div>
         <div className="legend-row mute" style={{marginTop:4, fontSize:9.5}}>Drag to pan · scroll to zoom</div>
       </div>
 

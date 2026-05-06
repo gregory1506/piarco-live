@@ -34,32 +34,6 @@ Piarco Live is a high-fidelity browser prototype for tracking passenger flights 
 - Updated the time scrubber so aircraft advance along their route path instead of drifting from stale heading values.
 - Added a fabricated Houston-to-Piarco flight, `UA1458`, to represent Houston service in the mock dataset.
 
-### Maritime Layer
-
-- Added a Trinidad/Tobago maritime layer scoped only to vessels coming to, leaving, or moving between Trinidad/Tobago ports.
-- Added local ports:
-  - Port of Spain
-  - Point Lisas
-  - Chaguaramas
-  - La Brea / Brighton
-  - Galeota
-  - Scarborough
-- Added sea lanes:
-  - Gulf of Paria coastal traffic
-  - Inter-island ferry lane
-  - Atlantic energy traffic
-  - Caribbean approach lane
-- Added sample vessels:
-  - `CARIBBEAN TRADER` to Port of Spain
-  - `NARIVA EXPRESS` on the inter-island ferry lane
-  - `ATLANTIC SPIRIT` to Galeota
-  - `PARIA PILOT` to Point Lisas
-  - `BAY ANCHOR` to Port of Spain
-- Rendered ports as diamond markers.
-- Rendered ships as directional vessel markers.
-- Added dashed sea-lane paths at partial opacity.
-- Updated the map legend with ship and port symbols.
-
 ### Files Changed
 
 - `data.js`
@@ -68,30 +42,25 @@ Piarco Live is a high-fidelity browser prototype for tracking passenger flights 
   - Added wider map context outlines.
   - Added route progress to airborne flights.
   - Added Houston sample flight.
-  - Added ports, sea lanes, and ships.
 - `MapCanvas.jsx`
   - Added support for multi-polygon geography and wider context outlines.
   - Added route curve rendering for aircraft.
   - Added flown route segment rendering.
   - Added Atlantic zoom control.
-  - Added maritime port, lane, and ship rendering.
 - `App.jsx`
   - Added route geometry helpers.
   - Updated live flight simulation to move aircraft along route curves.
-- `styles.css`
-  - Added legend styling for ships and ports.
-
 ### Verification
 
 - Ran `node --check data.js`.
 - Loaded the app through a local static server:
   - `http://127.0.0.1:8012/Piarco%20Live.html`
-- Used Playwright to verify browser rendering after the geography, route, and maritime changes.
-- Confirmed map labels, routes, ship markers, port markers, and board content render.
+- Used Playwright to verify browser rendering after the geography and route changes.
+- Confirmed map labels, routes, aircraft markers, and board content render.
 
 ### Known Notes
 
 - The app should be opened through a local HTTP server, not directly as a `file://` URL, because Firefox blocks the local JSX fetches used by in-browser Babel.
 - The browser console still reports a harmless missing `favicon.ico` 404.
-- Flight, vessel, airline, and callsign data are still fabricated mock data.
+- Flight, airline, and callsign data are still fabricated mock data.
 - Natural Earth geography is simplified for SVG rendering performance.

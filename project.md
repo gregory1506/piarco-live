@@ -29,12 +29,12 @@ Follow-up direction:
 
 ## Product Concept
 
-Piarco Live is a modern public-facing flight tracker for Piarco International Airport, TTPP/POS, in Trinidad and Tobago.
+T&T Flight Board is a modern public-facing flight tracker for Trinidad and Tobago's passenger airports: Piarco International Airport, TTPP/POS, and A.N.R. Robinson International Airport, TTCP/TAB.
 
 The product should let a traveler, family member, airport observer, or airport operations enthusiast quickly understand:
 
-- what passenger flights are arriving
-- what passenger flights are departing
+- what passenger flights are arriving at POS and TAB
+- what passenger flights are departing from POS and TAB
 - where aircraft are on the map
 - whether a flight is delayed, airborne, boarding, taxiing, landed, or scheduled
 - how weather and airport conditions may affect arrivals and departures
@@ -66,7 +66,7 @@ The design should avoid looking like a generic travel app or marketing landing p
 - Primary live/inbound accent: teal
 - Outbound/departure accent: amber
 - Delay/alert accent: rose
-- Secondary map/maritime accent: muted blue
+- Secondary map accent: muted blue
 
 ### Typography
 
@@ -141,14 +141,11 @@ The map should support:
 - landmass outlines
 - ocean labels
 - country/island labels
-- airport marker for TTPP/POS
+- airport markers for TTPP/POS and TTCP/TAB
 - aircraft route paths
 - aircraft markers
 - radar rings
 - coordinate grid
-- local ports
-- ship traffic to/from Trinidad/Tobago ports
-- sea lanes
 - weather overlays in later versions
 
 ## Flight Tracking Behavior
@@ -184,6 +181,7 @@ The prototype should include representative passenger routes such as:
 - Panama City/PTY to POS
 - Bridgetown/BGI from POS
 - Tobago/TAB to/from POS
+- Tobago/TAB to/from London, Frankfurt, Bridgetown, and other relevant passenger routes
 - Bogota/BOG to POS
 - Atlanta/ATL to POS
 - Toronto/YYZ from POS
@@ -245,7 +243,7 @@ Weather is part of the project concept even if it starts as mock data.
 
 Required weather fields:
 
-- METAR station code, TTPP
+- METAR station codes, TTPP and TTCP
 - temperature
 - wind direction and speed
 - visibility
@@ -261,54 +259,13 @@ Future weather overlays:
 - precipitation or storm cells
 - runway-use recommendation
 
-## Maritime Layer
-
-The project may include a secondary maritime layer, but it should remain scoped to Trinidad/Tobago relevance.
-
-### Maritime Scope
-
-Only include:
-
-- ships arriving at Trinidad/Tobago ports
-- ships leaving Trinidad/Tobago ports
-- ferries or vessels operating between Trinidad and Tobago
-- energy or cargo traffic tied to Trinidad/Tobago ports
-
-Do not show unrelated ocean traffic.
-
-### Ports
-
-Useful ports and maritime locations:
-
-- Port of Spain
-- Point Lisas
-- Chaguaramas
-- La Brea / Brighton
-- Galeota
-- Scarborough
-
-### Maritime Rendering
-
-Ships should:
-
-- use directional vessel markers
-- move along sea-lane paths
-- be visually secondary to aircraft
-- have partial-opacity sea-lane paths
-- appear in the legend
-
-Ports should:
-
-- be marked with a distinct symbol
-- be labeled on the map
-
 ## Interaction Requirements
 
 Required interactions:
 
 - pan map
 - zoom map
-- recenter on Piarco
+- recenter on Trinidad and Tobago
 - broad Atlantic route view
 - select aircraft on map
 - select flight from board
@@ -321,8 +278,6 @@ Required interactions:
 Recommended future interactions:
 
 - hover tooltip for aircraft
-- hover tooltip for ships
-- hover tooltip for ports
 - highlight route when hovering a flight row
 - click row to center map on aircraft
 - toggle map layers
@@ -354,8 +309,6 @@ A future implementation should separate these concepts:
 - live aircraft position data
 - route geometry
 - weather data
-- port metadata
-- vessel data
 - map geography data
 
 Mock data should remain available as a demo mode.
@@ -375,12 +328,6 @@ Possible weather data:
 - NOAA/METAR sources
 - aviationweather.gov
 - commercial aviation weather APIs
-
-Possible maritime data:
-
-- AIS providers
-- MarineTraffic-style commercial APIs
-- local port feeds, if available
 
 ## Technical Direction
 
@@ -404,12 +351,11 @@ Important implementation notes:
 ## Current Prototype Caveats
 
 - Flight data is fabricated.
-- Vessel data is fabricated.
 - Callsigns and airline names may be fictional.
 - Natural Earth geography is simplified for browser SVG rendering.
 - Route curves are approximate and should eventually become great-circle paths.
 - Weather is static mock data.
-- No real ADS-B, schedule, METAR, or AIS feed is connected yet.
+- No real ADS-B, schedule, or METAR feed is connected yet.
 
 ## Definition Of A Good Rebuild
 
@@ -420,6 +366,6 @@ A rebuild is on track if the first screen immediately feels like a working track
 - route paths connect real origins and destinations
 - arrivals/departures board is visible
 - selecting a flight updates the detail drawer
-- Piarco and Trinidad/Tobago geography are recognizable
+- POS, TAB, and Trinidad/Tobago geography are recognizable
 - long-haul routes have enough map context to make sense
 - the interface feels operational, modern, and data-dense

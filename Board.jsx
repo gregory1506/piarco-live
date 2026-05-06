@@ -1,18 +1,22 @@
 // Board.jsx - Departures / Arrivals board + filter chips
 const { useState: useStateB, useMemo: useMemoB } = React;
 
+function boardIsHomeAirport(code) {
+  return (window.HOME_AIRPORTS || ['POS']).includes(code);
+}
+
 function Board({ flights, mode, setMode, selectedId, onSelect, watchlist, toggleWatch, query, setQuery, showWatchOnly, setShowWatchOnly }) {
   const [filter, setFilter] = useStateB('all');
 
   const isArrival = mode === 'arrivals';
   const scoped = useMemoB(() => {
-    let list = flights.filter(f => isArrival ? f.dest === 'POS' : f.origin === 'POS');
+    let list = flights.filter(f => isArrival ? boardIsHomeAirport(f.dest) : boardIsHomeAirport(f.origin));
     if (filter !== 'all') {
       if (filter === 'delayed') list = list.filter(f => f.delay >= 10);
       else if (filter === 'onair') list = list.filter(f => f.alt > 500);
       else if (filter === 'ground') list = list.filter(f => f.alt < 500);
-      else if (filter === 'intl') list = list.filter(f => !['TAB','POS'].includes(isArrival ? f.origin : f.dest));
-      else if (filter === 'regional') list = list.filter(f => ['TAB','BGI','ANU','UVF','SVD','GEO'].includes(isArrival ? f.origin : f.dest));
+      else if (filter === 'intl') list = list.filter(f => !boardIsHomeAirport(isArrival ? f.origin : f.dest) && !['BGI','ANU','UVF','SVD','GEO'].includes(isArrival ? f.origin : f.dest));
+      else if (filter === 'regional') list = list.filter(f => ['POS','TAB','BGI','ANU','UVF','SVD','GEO'].includes(isArrival ? f.origin : f.dest));
     }
     if (showWatchOnly) list = list.filter(f => watchlist.has(f.id));
     if (query) {
@@ -28,11 +32,13 @@ function Board({ flights, mode, setMode, selectedId, onSelect, watchlist, toggle
     return list.sort((a,b) => (isArrival ? a.eta : a.dep).localeCompare(isArrival ? b.eta : b.dep));
   }, [flights, isArrival, filter, showWatchOnly, watchlist, query]);
 
-  const arrivalsCount = flights.filter(f => f.dest === 'POS').length;
-  const departuresCount = flights.filter(f => f.origin === 'POS').length;
+  const arrivalsCount = flights.filter(f => boardIsHomeAirport(f.dest)).length;
+  const departuresCount = flights.filter(f => boardIsHomeAirport(f.origin)).length;
 
   const statusLabel = (f) => {
     if (f.delay >= 15) return { text: 'DELAY ' + f.delay + "'", cls: 'st-delay' };
+    if (f.status === 'landed') return { text: 'LANDED', cls: 'st-landed' };
+    if (f.status === 'canceled') return { text: 'CANCELED', cls: 'st-delay' };
     if (f.status === 'enroute') return { text: 'EN ROUTE', cls: 'st-enroute' };
     if (f.status === 'departing') return { text: 'DEPARTED', cls: 'st-departing' };
     if (f.status === 'boarding') return { text: 'BOARDING', cls: 'st-boarding' };
@@ -43,7 +49,7 @@ function Board({ flights, mode, setMode, selectedId, onSelect, watchlist, toggle
 
   // progress (for arrivals) — simple function of distance
   const progress = (f) => {
-    if (f.origin === 'POS') return null;
+    if (boardIsHomeAirport(f.origin)) return null;
     const total = 600; // assumed typical trip nm cap for viz
     return Math.max(0.02, Math.min(0.99, 1 - f.dist/total));
   };
@@ -72,7 +78,7 @@ function Board({ flights, mode, setMode, selectedId, onSelect, watchlist, toggle
             <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/>
           </svg>
           <input
-            placeholder={isArrival ? "Flight or origin…" : "Flight or destination…"}
+            placeholder={isArrival ? "Flight, origin, or airport…" : "Flight, destination, or airport…"}
             value={query} onChange={(e) => setQuery(e.target.value)}
             style={{background:'transparent',border:0,outline:'none',color:'var(--text)',fontFamily:'JetBrains Mono, monospace',fontSize:11,padding:'5px 0',width:150}} />
         </div>
@@ -83,6 +89,14 @@ function Board({ flights, mode, setMode, selectedId, onSelect, watchlist, toggle
           <button key={c.k} className={`chip ${filter===c.k?'on':''}`} onClick={() => setFilter(c.k)}>{c.l}</button>
         ))}
       </div>
+
+      {window.FEED_META?.TAB && (
+        <div className="feed-note">
+          <span className="mono">TAB FEED</span>
+          <span>{window.FEED_META.TAB.date}</span>
+          <span>{window.FEED_META.TAB.source}</span>
+        </div>
+      )}
 
       <div className="board">
         <div className="board-header">
@@ -97,7 +111,7 @@ function Board({ flights, mode, setMode, selectedId, onSelect, watchlist, toggle
         {scoped.length === 0 && <div className="empty">No flights match.</div>}
         {scoped.map(f => {
           const s = statusLabel(f);
-          const port = isArrival ? f.origin : f.dest;
+          const airport = isArrival ? f.origin : f.dest;
           const time = isArrival ? f.eta : f.dep;
           const prog = progress(f);
           const isSel = f.id === selectedId;
@@ -110,8 +124,8 @@ function Board({ flights, mode, setMode, selectedId, onSelect, watchlist, toggle
                 <div className="al mono" style={{fontSize:9.5, letterSpacing:'0.08em', marginTop:2}}>{f.type} · {f.airline}</div>
               </div>
               <div>
-                <div className="city">{CITIES[port] || port}</div>
-                <div className="city-sub">{port} · {f.airline}</div>
+                <div className="city">{CITIES[airport] || airport}</div>
+                <div className="city-sub">{airport} · {f.airline}</div>
               </div>
               <div className="time mono">
                 {f.delay >= 10 ? (

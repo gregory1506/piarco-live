@@ -148,13 +148,6 @@ body { overflow: hidden; }
 .sw-outb { background: var(--amber); clip-path: polygon(50% 0, 100% 100%, 50% 80%, 0 100%); }
 .sw-delay { background: var(--rose); clip-path: polygon(50% 0, 100% 100%, 50% 80%, 0 100%); }
 .sw-gnd { background: var(--text-mute); border-radius: 50%; }
-.sw-ship { background: oklch(0.72 0.09 215); clip-path: polygon(50% 0, 100% 65%, 50% 100%, 0 65%); }
-.sw-port {
-  width: 9px;
-  height: 9px;
-  border: 1px solid oklch(0.72 0.09 215);
-  transform: rotate(45deg);
-}
 
 .map-stat {
   position: absolute; top: 12px; right: 12px;
@@ -289,7 +282,27 @@ body { overflow: hidden; }
 .st-boarding  { background: oklch(0.72 0.12 75 / 0.15); color: var(--amber); }
 .st-taxi      { background: oklch(0.72 0.12 75 / 0.12); color: var(--amber); }
 .st-scheduled { background: var(--line); color: var(--text-dim); }
+.st-landed    { background: oklch(0.56 0.10 190 / 0.14); color: var(--teal); }
 .st-delay     { background: oklch(0.7 0.18 22 / 0.15); color: var(--rose); }
+
+.feed-note {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-mute);
+  font-size: 10.5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.feed-note .mono {
+  color: var(--teal);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.08em;
+}
 
 .row .progress {
   grid-column: 1 / -1;
@@ -323,12 +336,12 @@ body { overflow: hidden; }
   display: grid; grid-template-columns: minmax(90px, auto) minmax(80px, 1fr) minmax(90px, auto); align-items: center; gap: 14px;
   border-bottom: 1px solid var(--line);
 }
-.rv-port { min-width: 0; }
-.rv-port .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rv-port { font-family: 'JetBrains Mono', monospace; }
-.rv-port .code { font-size: 18px; color: var(--text); letter-spacing: 0.04em; }
-.rv-port .name { font-size: 10.5px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.1em; }
-.rv-port .tm { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+.rv-airport { min-width: 0; }
+.rv-airport .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rv-airport { font-family: 'JetBrains Mono', monospace; }
+.rv-airport .code { font-size: 18px; color: var(--text); letter-spacing: 0.04em; }
+.rv-airport .name { font-size: 10.5px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.1em; }
+.rv-airport .tm { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
 .rv-line { position: relative; height: 24px; }
 .rv-line::before {
   content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px;
