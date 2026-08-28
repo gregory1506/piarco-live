@@ -25,7 +25,7 @@ export type FlightStatus =
   | 'landed'
   | 'canceled';
 
-export type FlightTrack = 'ground' | 'climbing' | 'cruise' | 'descending';
+export type FlightTrack = 'ground' | 'gate' | 'climbing' | 'cruise' | 'descending';
 
 export interface Flight {
   id: string;
@@ -73,4 +73,7 @@ export interface NearbyIsle {
 export interface FeedMeta {
   date: string;
   source: string;
+  label?: string;
+  updated?: string;
+  note?: string;
 }
