@@ -66,7 +66,10 @@ export const FLIGHTS: Flight[] = [
   { id:'9Y210', airline:'Island Charter', type:'C208', origin:'SVD', dest:'POS', status:'enroute', eta:'14:22', dep:'13:30', gate:'—', lat:11.40, lon:-61.60, alt:8500, spd:168, hdg:182, track:'descending', dist:90, delay:0, routeProgress:0.76 },
   { id:'BW602', airline:'Caribbean Airlines', type:'B738', origin:'JFK', dest:'TAB', status:'enroute', eta:'15:48', dep:'10:45', gate:'1', lat:22.40, lon:-66.20, alt:35000, spd:478, hdg:155, track:'cruise', dist:560, delay:0, routeProgress:0.71 },
   { id:'BW452', airline:'Caribbean Airlines', type:'AT72', origin:'BGI', dest:'TAB', status:'enroute', eta:'14:52', dep:'14:20', gate:'2', lat:12.18, lon:-60.14, alt:18000, spd:292, hdg:238, track:'cruise', dist:46, delay:0, routeProgress:0.58 },
-  ...(TAB_LIVE_FEED as Flight[])
+  ...(TAB_LIVE_FEED as Omit<Flight, 'routeProgress'>[]).map((f) => ({
+    ...f,
+    routeProgress: (f as Partial<Flight>).routeProgress ?? 0,
+  }))
 ];
 
 export const CITIES: Record<string, string> = {

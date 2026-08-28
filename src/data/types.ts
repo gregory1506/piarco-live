@@ -25,7 +25,7 @@ export type FlightStatus =
   | 'landed'
   | 'canceled';
 
-export type FlightTrack = 'ground' | 'gate' | 'climbing' | 'cruise' | 'descending';
+export type FlightTrack = 'ground' | 'gate' | 'climbing' | 'cruise' | 'descending' | 'landed';
 
 export interface Flight {
   id: string;
