@@ -434,3 +434,15 @@ body { overflow: hidden; }
   .map-wrap { border-right: 0; border-bottom: 1px solid var(--line); }
   .detail { max-height: 60%; }
 }
+
+.map-tooltip {
+  pointer-events: none;
+  background: #0E141A;
+  border: 1px solid var(--line, #2A3644);
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: #C7D0D8;
+  z-index: 20;
+  white-space: nowrap;
+}
