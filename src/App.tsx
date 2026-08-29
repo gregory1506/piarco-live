@@ -134,6 +134,7 @@ export default function App() {
   });
   const [clock, setClock] = useState(() => nowClock());
   const [detailOpen, setDetailOpen] = useState(true);
+  const [sheetExpanded, setSheetExpanded] = useState(false);
   const [openSkyFlights, setOpenSkyFlights] = useState<Flight[]>([]);
   const [openSkyStatus, setOpenSkyStatus] = useState('idle');
   const [tick, setTick] = useState(0);
@@ -266,7 +267,14 @@ export default function App() {
           hoveredId={hoveredId}
           onHoverFlight={setHoveredId}
         />
-        <div className={`right-col ${detailOpen && selected ? 'detail-open' : ''}`}>
+        <div
+          className={`right-col ${detailOpen && selected ? 'detail-open' : ''} ${sheetExpanded ? 'sheet-expanded' : ''}`}
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest('.panel-tabs') && window.innerWidth <= 800) {
+              setSheetExpanded((v) => !v);
+            }
+          }}
+        >
           <Board
             flights={liveFlights}
             mode={mode}
