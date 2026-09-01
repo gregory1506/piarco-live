@@ -148,7 +148,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const URL = '/api/opensky';
+    const URL = 'https://opensky.gregstack.xyz/api/opensky';
     const fetchFlights = () => {
       setOpenSkyStatus('loading');
       fetch(URL)
