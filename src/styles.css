@@ -263,6 +263,9 @@ body { overflow: hidden; }
 .row.selected::before {
   content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--teal);
 }
+.row.hovered {
+  background: var(--panel-hover, rgba(255,255,255,0.03));
+}
 .row .star { color: var(--text-mute); font-size: 14px; width: 22px; text-align: center; background: none; border: 0; cursor: pointer; padding: 0; }
 .row .star.on { color: var(--amber); }
 .row .flt { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text); font-weight: 500; }
@@ -433,4 +436,79 @@ body { overflow: hidden; }
   .right-col.detail-open { grid-template-rows: minmax(0, 1fr) minmax(0, 55%); }
   .map-wrap { border-right: 0; border-bottom: 1px solid var(--line); }
   .detail { max-height: 60%; }
+}
+
+.map-tooltip {
+  pointer-events: none;
+  background: #0E141A;
+  border: 1px solid var(--line, #2A3644);
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: #C7D0D8;
+  z-index: 20;
+  white-space: nowrap;
+}
+
+/* Mobile layout: map full-bleed, board as a bottom sheet, collapsed METAR strip */
+@media (max-width: 800px) {
+  .main {
+    position: relative;
+    display: block;
+    height: calc(100vh - var(--header-height, 96px) - var(--footer-height, 56px));
+    overflow: hidden;
+  }
+
+  .map-wrap {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+
+  .right-col {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    height: 44px;
+    max-height: 85%;
+    overflow: hidden;
+    transition: height 0.2s ease-out;
+    background: var(--bg, #0B0F12);
+    border-top: 1px solid var(--line, #2A3644);
+  }
+
+  .right-col.sheet-expanded {
+    height: 85%;
+    overflow-y: auto;
+  }
+
+  .panel-tabs {
+    cursor: pointer;
+  }
+
+  .metar-strip {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .detail {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    overflow-y: auto;
+    max-height: none;
+  }
+
+  .scrub-ticks span {
+    display: none;
+  }
+  .scrub-ticks span:first-child,
+  .scrub-ticks span:nth-child(3),
+  .scrub-ticks span:last-child {
+    display: inline;
+  }
 }
