@@ -28,7 +28,9 @@ export default function Header({ clock, openSkyStatus }: HeaderProps) {
       </div>
       <div className="header-right">
         <div className="live-dot" title={`ADS-B: ${openSkyStatus}`}></div>
-        <span title={`ADS-B: ${openSkyStatus}`}>{openSkyStatus === 'ok' ? 'ADS-B LIVE' : 'LIVE'}</span>
+        <span title={`ADS-B: ${openSkyStatus}`}>
+          {openSkyStatus === 'ok' ? 'ADS-B LIVE' : openSkyStatus === 'loading' ? 'ADS-B CONNECTING' : 'ADS-B OFFLINE'}
+        </span>
         <span className="mute">·</span>
         <span className="clock mono">{clock}</span>
         <span className="mute">AST</span>

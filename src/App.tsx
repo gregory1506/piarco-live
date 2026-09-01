@@ -148,8 +148,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const BBOX = 'lamin=8.0&lomin=-70&lamax=14.5&lomax=-57';
-    const URL = 'https://opensky-network.org/api/states/all?' + BBOX;
+    const URL = '/api/opensky';
     const fetchFlights = () => {
       setOpenSkyStatus('loading');
       fetch(URL)
@@ -168,7 +167,7 @@ export default function App() {
         });
     };
     fetchFlights();
-    const i = setInterval(fetchFlights, 60000);
+    const i = setInterval(fetchFlights, 90000); // 90s: 960 calls/day * 2 credits = 1,920, well under the 4,000/day authenticated cap
     return () => clearInterval(i);
   }, []);
 
