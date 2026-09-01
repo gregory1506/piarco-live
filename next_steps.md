@@ -1,115 +1,28 @@
 # Next Steps
 
-## 1. Replace Mock Data With Real Feeds
+Review this before starting any session. See `work_log.md`'s 2026-09-01 entry for full context, and `docs/superpowers/plans/2026-08-31-live-data-fix.md` for the complete task-by-task plan.
 
-The biggest credibility jump is moving from fabricated flight data to real or semi-real sources.
+## Now — resume the live-data fix
 
-- Evaluate flight data providers:
-  - ADS-B Exchange
-  - OpenSky Network
-  - Aviationstack
-  - FlightAware AeroAPI
-  - Cirium, if commercial-grade schedules are needed
-- Separate scheduled airport board data from live aircraft positions.
-- Add a data freshness indicator per feed.
-- Show clear fallback states when live aircraft position is unavailable but scheduled flight data exists.
-- Keep the current mock data as a local demo mode.
+1. **Diagnose the VPS TLS blocker.** `opensky.gregstack.xyz` (Coolify app `swut1oqmd0c0yd8gtlve9uaq`) builds and deploys fine but HTTPS fails with `tlsv1 alert internal error` on every attempt, even with `is_force_https_enabled: false`. Needs Coolify UI or SSH access to see the actual Caddy container logs — not diagnosable via the Coolify API alone.
+2. **Once TLS is sorted (or intentionally bypassed):** point the existing `functions/api/opensky.ts` Cloudflare Pages Function at the VPS proxy over plain `http://opensky.gregstack.xyz/api/opensky` (server-to-server, no mixed-content issue) instead of doing the OAuth2 dance in the Function itself. This sidesteps needing valid TLS on the VPS origin entirely — only the browser→Cloudflare leg needs HTTPS, which already works.
+3. Redeploy piarco-live, verify `/api/opensky` returns real aircraft data end-to-end via Chrome DevTools MCP (check Network tab + header badge reads "ADS-B LIVE").
+4. Then Task 4 of the plan: manually sign up for FlightAware AeroAPI (Personal tier, $5/mo free credit) to replace the mock schedule board — no agent can do this signup step.
 
-## 2. Improve Route Geometry
+## Known-good, don't re-break
 
-The current route curves are credible for a prototype, but still approximate.
+- `origin/main` on GitHub now matches the deployed app (fixed 2026-09-01 — previously diverged for weeks).
+- Forgejo SSH is on **port 2222**, not 22 — `ssh://git@git.newscloud.store:2222/greg/<repo>.git`. Got this wrong once already when creating the `opensky-proxy` Coolify app.
+- The shared `scrollytelling-deploy` deploy key (used by cv-site/project-site too) is already added to the `opensky-proxy` repo.
+- OpenSky requires OAuth2 client-credentials now (Basic Auth retired 2026-03-18). Credentials are stored as env vars on the Coolify `opensky-proxy` app; do NOT re-fetch/re-paste them into chat or files — they're already set.
+- **OpenSky's servers are unreachable from Cloudflare's entire network** (not just CORS) — confirmed via direct testing. Any future OpenSky integration must go through the VPS, never a Cloudflare Function calling OpenSky directly.
+- FlightRadar24's public feed was evaluated and rejected — bot-protected, returns fake-empty data to automated callers, still ToS-risky. Don't revisit unless the bot-protection situation changes.
 
-- Replace quadratic SVG route curves with great-circle route sampling.
-- Add route clipping so paths do not visually overrun the map at extreme zoom levels.
-- Separate route path styling by status:
-  - inbound
-  - outbound
-  - delayed
-  - landed
-  - scheduled but not airborne
-- Add airport endpoint markers for long-haul origins when zoomed out.
+## Later
 
-## 3. Add Real Airport Surface Detail
-
-Piarco and A.N.R. Robinson are currently represented as point markers. A realistic airport layer would improve local zoom views.
-
-- Add Piarco runway 10/28 geometry.
-- Add A.N.R. Robinson runway geometry.
-- Add terminal/apron zones for both airports.
-- Add taxiway/stand approximations for ground aircraft.
-- Place grounded aircraft near the terminal instead of stacking them at the airport coordinate.
-- Show active runway based on wind direction.
-
-## 4. Add Weather And Operational Overlays
-
-Weather was part of the original design brief and can become a strong differentiator.
-
-- Add METAR parsing instead of static METAR copy.
-- Add wind barb or wind direction indicator near TTPP.
-- Add cloud ceiling and visibility badges.
-- Add precipitation or storm-cell overlay if a weather API is used.
-- Add runway recommendation based on wind direction.
-
-## 5. Improve Interaction Design
-
-The prototype has map clicks and a detail drawer, but the data layers can be more discoverable.
-
-- Add hover tooltips for aircraft and airports.
-- Let route paths highlight when hovering a flight row.
-- Let clicking a flight row center the map on that aircraft.
-- Add a "follow selected" toggle.
-- Add keyboard shortcuts for:
-  - arrivals/departures tabs
-  - recenter
-  - Atlantic view
-  - search focus
-
-## 6. Mobile Layout Pass
-
-The design is desktop-first. A specific mobile pass will prevent the board and map from fighting for space.
-
-- Make the map full-screen first on mobile.
-- Put arrivals/departures in a bottom sheet.
-- Collapse METAR into a horizontal strip.
-- Move detail drawer to a full-height mobile panel.
-- Reduce always-on labels on the map at narrow widths.
-
-## 7. Convert The Prototype To A Buildable App
-
-The current app loads React and Babel in the browser, which is fine for prototyping but fragile for normal use.
-
-- Move to Vite or another lightweight build setup.
-- Convert global `window.*` data into ES modules.
-- Add npm scripts for local dev and build.
-- Add a production build output.
-- Add a favicon to remove the current harmless browser 404.
-
-## 8. Add Basic Tests
-
-The app is visual, but a few tests would protect the routing and projection logic.
-
-- Unit test route progress and bearing calculations.
-- Unit test route point generation for inbound and outbound flights.
-- Add a smoke test that loads the app and checks:
-  - map SVG exists
-  - flights render
-  - arrivals/departures board renders
-- Add visual regression screenshots once the layout stabilizes.
-
-## 9. Data And Product Boundaries
-
-Before connecting real feeds, decide exactly what this product is.
-
-- Is this mainly for travelers and people meeting arrivals?
-- Is it an ops-style public dashboard?
-- Should cargo, private, and charter flights be hidden by default?
-- Should Trinidad/Tobago airport coverage include both POS and TAB equally, or should POS remain the primary airport?
-
-## Recommended Immediate Order
-
-1. Convert the app to Vite so local development is reliable.
-2. Add runway and airport surface geometry for POS and TAB.
-3. Replace the current route curve math with great-circle sampling.
-4. Add hover/click interactions that link board rows, aircraft, and paths.
-5. Add a layer toggle panel for flights, weather, and routes.
-6. Start evaluating real flight schedule and ADS-B data providers.
+- **Schedule/gate/ETA data is still 100% mock** — see plan Task 4/5 (AeroAPI). This is the second half of making the "LIVE" badge honest.
+- Airport surface detail: terminal/apron zones, taxiway/stand approximations for ground aircraft, active-runway-by-wind-direction.
+- Weather: parse real METAR instead of the static copy in the header, add wind barb, cloud ceiling/visibility badges.
+- Route polish: clip paths at extreme zoom, add endpoint markers for long-haul origins when zoomed out.
+- Tests: unit test route progress/bearing math, add a smoke test for map+board render.
+- Product scope decision: is this for travelers/meeters, or an ops-style public dashboard? Should charter/cargo be hidden by default?

@@ -1,5 +1,32 @@
 # Work Log
 
+## 2026-09-01 — Live-data fix: partial progress, HTTPS blocker on VPS proxy
+
+**Context:** The deployed app (piarco-live.pages.dev, from the Aug 2026 Vite/TypeScript SDD rebuild) badges itself "LIVE" but was never actually pulling live data. See `docs/superpowers/specs/2026-08-31-live-data-fix-design.md` and `docs/superpowers/plans/2026-08-31-live-data-fix.md` for the full investigation and plan.
+
+**Root causes found:**
+- OpenSky ADS-B fetch failed 100% of the time in production: CORS-blocked from a browser, and OpenSky retired Basic Auth for OAuth2 client-credentials on 2026-03-18 anyway.
+- The flight-schedule board (`TAB FEED`) was 100% hardcoded mock data frozen at a fake `2026-04-20` date, no live source at all.
+- Side finding: the deployed rebuild's source only existed in a local, unpushed git branch — fixed.
+
+**Completed this session:**
+- Merged the Vite/TypeScript rebuild branch into `main` and pushed to GitHub — `origin/main` now matches the deployed app (was previously the old plain-JS prototype).
+- Removed stray `.netlify/` tracked files (leftover from an abandoned deploy target) and gitignored `.wrangler/`/`.netlify/`.
+- Wrote `functions/api/opensky.ts`, a Cloudflare Pages Function that does the OpenSky OAuth2 client-credentials flow server-side and proxies `/api/opensky`. Fixed the Header badge to say "ADS-B OFFLINE" instead of the misleading generic "LIVE" when the feed is down.
+- **Discovered Cloudflare's entire network is blocked from reaching opensky-network.org** — not just CORS, but a hard connect failure (confirmed via a temporary debug endpoint: `auth.opensky-network.org`, `opensky-network.org`, and the API root all time out from every Cloudflare Worker request, while working fine from a normal residential connection). This is almost certainly OpenSky's infrastructure blanket-blocking cloud-datacenter egress ranges as anti-abuse. A Cloudflare Pages Function cannot work around this.
+- Pivoted to hosting the OpenSky proxy on the existing Coolify VPS instead (same infra as cv-site/project-site): created Forgejo repo `git.newscloud.store/greg/opensky-proxy` (minimal Node 20, zero dependencies, `server.js`), created the Coolify app via API, fixed a git-URL port bug (used default port 22 instead of Forgejo's actual port 2222 — same mistake is easy to make again, the working apps all use `ssh://git@git.newscloud.store:2222/...`), added the DNS A record for `opensky.gregstack.xyz` → `132.145.130.109`. The app now **builds and deploys successfully** on the VPS.
+- Also tested FlightRadar24's public feed as an alternative — confirmed it's not viable: bot-protected (itself Cloudflare-fronted with active anti-scraping), returns a valid-shaped but empty JSON body to automated callers even for a busy NYC bounding box. Not pursued further.
+
+**Blocked / not yet done:**
+- **TLS won't come up on `opensky.gregstack.xyz`.** Both the ad-hoc `*.sslip.io` fallback domain and the real `opensky.gregstack.xyz` domain get an identical `LibreSSL: tlsv1 alert internal error` on HTTPS, even after disabling `is_force_https_enabled` on the Coolify app (which should have left it serving plain HTTP — it still 308-redirects to HTTPS at the edge). This is a Caddy/Let's Encrypt issue on the VPS I can't diagnose further via the Coolify API alone — needs someone with Coolify UI/server access to check the actual Caddy container logs.
+- Planned next step once TLS is sorted (or bypassed): rather than fight for a directly HTTPS-reachable VPS endpoint, point the *existing* Cloudflare Pages Function at the VPS proxy over plain HTTP (server-to-server, Cloudflare→VPS has no mixed-content/CORS constraint — only the browser→Cloudflare leg needs HTTPS, and that's already solved). This avoids needing valid TLS on the VPS proxy at all.
+- Plan's Task 4 (AeroAPI real schedule data) not started — still needs the manual FlightAware AeroAPI signup.
+- OpenSky secrets (`OPENSKY_CLIENT_ID`/`SECRET`) are set as env vars on both the (now-dead-end) Cloudflare Pages project and the Coolify `opensky-proxy` app.
+
+**Files touched:** `.gitignore`, `functions/api/opensky.ts`, `src/App.tsx`, `src/components/Header.tsx`, `docs/superpowers/specs/2026-08-31-live-data-fix-design.md`, `docs/superpowers/plans/2026-08-31-live-data-fix.md` (all in piarco-live); new repo `opensky-proxy` (`server.js`, `Dockerfile`, `package.json`).
+
+**Status:** partial — proxy code and VPS deployment both work in isolation, blocked on VPS TLS before they can be wired together and verified end-to-end.
+
 ## 2026-04-18
 
 ### Project Context
