@@ -2,11 +2,9 @@ import type { Flight, FeedMeta } from './types';
 
 export const FEED_META: Record<string, FeedMeta> = {
   TAB: {
-    label: 'TAB public status feed',
-    source: 'Trip.com live airport/airline status plus published Caribbean Airlines TAB schedule',
-    date: '2026-04-20',
-    updated: 'Public sources checked Apr 20, 2026',
-    note: 'Statuses depend on public aggregator availability; use provider APIs before production.'
+    label: 'AeroAPI live schedule feed',
+    source: 'FlightAware AeroAPI (Personal tier)',
+    note: 'Falls back to illustrative demo flights if the live feed is unavailable.',
   }
 };
 

@@ -2,16 +2,16 @@
 
 Review this before starting any session. See `work_log.md`'s 2026-09-01 entries for full context, and `docs/superpowers/plans/2026-08-31-live-data-fix.md` for the complete task-by-task plan.
 
-## Now — finish the live-data fix
+## Now — both live feeds are fully operational
 
-ADS-B is done (see below). Remaining:
+ADS-B positions are live (session 2). AeroAPI schedule board is live with correct rendering (session 4). The full live-data-fix plan is complete.
 
-1. **Task 4/5 of the plan: real schedule board via AeroAPI.** Sign up for FlightAware AeroAPI (Personal tier, $5/mo free credit) — no agent can do this signup step. Then wire `/api/schedule?airport=TTPP|TTCP` (proxy on the same VPS, same pattern as `opensky-proxy`) into the board, replacing the hardcoded `TAB_LIVE_FEED`/`FLIGHTS` mock data, with graceful fallback to the mock data if the feed errors.
-2. Optional cleanup: rename `opensky-proxy` if it'll also host the schedule proxy, or add a second small service — either is fine, just keep the VPS deploy pattern (Forgejo repo → Coolify app → Caddyfile block → `docker restart caddy`) documented below.
+No immediate blockers remain.
 
 ## Live and working
 
 - **ADS-B aircraft positions are genuinely live** (fixed 2026-09-01). `src/App.tsx` fetches `https://opensky.gregstack.xyz/api/opensky` directly from the browser — a Node proxy on the Coolify VPS that does OpenSky's OAuth2 client-credentials flow server-side. Header badge reads "ADS-B LIVE" when working.
+- **AeroAPI schedule board is live** (fixed 2026-09-01). `functions/api/schedule.ts` proxies FlightAware AeroAPI via Cloudflare Pages Functions. Board shows real flights with IATA codes, city names, aircraft types, and correct statuses. En-route flights render with trail polylines on the map.
 - `origin/main` on GitHub matches the deployed app (fixed 2026-09-01 — previously diverged for weeks).
 
 ## How the VPS proxy deploy pattern actually works (learned the hard way)

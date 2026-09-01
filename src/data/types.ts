@@ -71,7 +71,7 @@ export interface NearbyIsle {
 }
 
 export interface FeedMeta {
-  date: string;
+  date?: string;
   source: string;
   label?: string;
   updated?: string;

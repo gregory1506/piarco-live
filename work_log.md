@@ -1,5 +1,46 @@
 # Work Log
 
+## 2026-09-01 (session 4) — AeroAPI integration fixes: trails, IATA codes, aircraft types
+
+**Fixed critical rendering issues discovered via Playwright testing after the AeroAPI integration (session 3).**
+
+**Root causes found:**
+1. **Zero trail polylines** — AeroAPI schedule flights had `routeProgress: 0` and `spd: 0`, so `flightOnRoute` never advanced them along their routes. The MapCanvas trail filter (`routeProgress > 0 && track !== 'gate'`) excluded all schedule flights.
+2. **ICAO codes in board** — AeroAPI returns ICAO codes (KJFK, KMIA, EGKK) for airports, but the `AIRPORTS` lookup only has IATA codes (JFK, MIA, LGW). This also broke trail rendering since `AIRPORTS['KJFK']` returned undefined.
+3. **All flights stacked at gate** — `flightOnRoute` used `alt < 500` to decide ground vs airborne. Schedule flights had `alt: 0` and `track: 'gate'`, so even en-route flights were forced to the apron.
+4. **Aircraft type showed "???"** — mapper hardcoded `type: '???'` instead of using AeroAPI's `aircraft_type` field.
+
+**Fixes applied:**
+- `src/data/scheduleFeed.ts`: Complete rewrite. Added ICAO→IATA lookup table (40+ airports). Added `calcProgress()` that computes route progress from `actual_out`/`estimated_in` timestamps. En-route flights now get `alt: 35000`, `spd: 450`, `track: 'cruise'`, and a real `routeProgress` value. Aircraft type mapped from `aircraft_type` field. Board now shows city names (e.g., "New York", "Miami") via `code_iata` from AeroAPI.
+- `src/components/MapCanvas.tsx`: Trail filter changed from `alt > 300` to `routeProgress > 0 && track !== 'gate' && track !== 'ground'`. Stats airborne counter updated similarly.
+- `src/App.tsx`: Added `isAirborne()` helper checking `track` and `status` instead of only altitude. `flightOnRoute` uses this to position en-route flights along great-circle routes.
+- `src/data/types.ts`: Made `FeedMeta.date` optional (live feeds don't have a static date).
+- `src/data/flights.ts`: Updated `FEED_META` to reference AeroAPI.
+
+**Playwright verification (5 viewports):**
+- Desktop 1920: 6 trail polylines, 81 markers, 7 airborne, board shows IATA codes + city names + aircraft types
+- Mobile 390: Map full-bleed, board collapsed to bottom-sheet tabs, responsive layout working
+- All viewports: ADS-B LIVE badge, correct stats, no console errors
+
+**Files touched:** `src/data/scheduleFeed.ts` (rewritten), `src/App.tsx`, `src/components/MapCanvas.tsx`, `src/data/types.ts`, `src/data/flights.ts`, `src/data/__fixtures__/aeroapi-sample-ttpp.json` (new), `functions/api/schedule.ts`
+
+**Status:** Both live feeds (ADS-B + schedule) fully operational with correct rendering. Live-data-fix plan complete.
+
+## 2026-09-01 (session 3) — AeroAPI schedule board: LIVE
+
+**Replaced the hardcoded mock schedule with real FlightAware AeroAPI data.** Tasks 4–6 of the live-data-fix plan, completed.
+
+**What changed:**
+- `functions/api/schedule.ts`: rewrote from AeroDataBox/RapidAPI proxy to FlightAware AeroAPI proxy. Endpoint: `GET https://aeroapi.flightaware.com/aeroapi/airports/{ICAO}/flights`, auth via `x-apikey` header. Accepts IATA codes (POS/TAB) from the client, maps to ICAO (TTPP/TTCP) server-side. 5-minute cache.
+- `src/data/scheduleFeed.ts`: rewrote mapper from AeroDataBox response shape to FlightAware AeroAPI shape. Handles `arrivals`, `departures`, `scheduled_arrivals`, `scheduled_departures` arrays. Uses `ident_iata` for board display IDs, `operator_iata` for airline codes. Maps FlightAware status strings ("En Route", "Landed / Taxiing", "Scheduled / Delayed", etc.) to the app's `FlightStatus` type.
+- `src/App.tsx`: updated import (`mapAeroApiToFlights`), poll interval changed from 6h to 5min (AeroAPI $5/mo credit covers this easily at two small airports).
+- `src/data/__fixtures__/aeroapi-sample-ttpp.json`: saved real API response as test fixture.
+- Set `AEROAPI_KEY` secret on Cloudflare Pages via `wrangler pages secret put`.
+
+**Verified live:** `curl https://piarco-live.pages.dev/api/schedule?airport=POS` returns 15 arrivals, 15 departures, 15 scheduled arrivals, 15 scheduled departures — all real FlightAware data. Deployed successfully.
+
+**Status:** Both live data feeds (ADS-B + schedule) are now operational. The full live-data-fix plan is complete.
+
 ## 2026-09-01 (session 2) — ADS-B live data fix: RESOLVED
 
 **Root cause of the HTTPS blocker found via direct SSH** (`con-oci` alias → `ubuntu@132.145.130.109`, key `~/.ssh/firevps.key`): the VPS's Caddy reverse proxy at `/home/ubuntu/homelab/caddy/Caddyfile` is a manually-maintained static file with an explicit domain block per app (this is the "external Caddyfile" referenced in cv-site/project-site's old work logs). `opensky.gregstack.xyz` was never added to it. Confirmed via `docker logs caddy` (zero mentions of the domain, ever) and Caddy's own admin API (`localhost:2019/config/` had no trace of it) — not a rate limit, not DNS, not container health, not the Coolify API-managed `fqdn`/`is_force_https_enabled` settings (those don't control this static file at all).

@@ -142,7 +142,7 @@ const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function MapCanvas
   const zoomOut = () => setZoom((z) => Math.max(MIN_ZOOM, z / 1.4));
 
   const stats = useMemo(() => {
-    const airborne = flights.filter((f) => f.alt > 500).length;
+    const airborne = flights.filter((f) => f.alt > 500 || f.track === 'climbing' || f.track === 'cruise' || f.track === 'descending' || f.status === 'enroute').length;
     const ground = flights.length - airborne;
     const inbound = flights.filter((f) => isHomeAirport(f.dest)).length;
     const outbound = flights.filter((f) => isHomeAirport(f.origin)).length;
@@ -282,7 +282,7 @@ const MapCanvas = forwardRef<MapCanvasHandle, MapCanvasProps>(function MapCanvas
 
         <g>
           {flights
-            .filter((f) => f.alt > 300)
+            .filter((f) => f.routeProgress > 0 && f.track !== 'gate' && f.track !== 'ground')
             .map((f) => {
               const target = AIRPORTS[f.dest];
               const origin = AIRPORTS[f.origin];

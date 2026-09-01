@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Flight, LatLon } from './data/types';
 import { AIRPORTS, APRON_OFFSETS, HOME_AIRPORTS } from './data/airports';
 import { FLIGHTS } from './data/flights';
+import { mapAeroApiToFlights } from './data/scheduleFeed';
 import { bearingBetween, apronSlot, clamp, distanceNm } from './lib/geo';
 import { greatCircleBearingAt, greatCirclePointAt } from './lib/greatCircle';
 import Ticker from './components/Ticker';
@@ -85,18 +86,26 @@ function buildGroundIndex(flights: Flight[]): Map<string, number> {
   return map;
 }
 
+function isAirborne(f: Flight): boolean {
+  if (f.alt >= 500) return true;
+  if (f.track === 'climbing' || f.track === 'cruise' || f.track === 'descending') return true;
+  if (f.status === 'enroute') return true;
+  return false;
+}
+
 function flightOnRoute(f: Flight, tick: number, scrub: number, groundIndex: Map<string, number>): Flight {
   const origin = AIRPORTS[f.origin];
   const dest = AIRPORTS[f.dest];
   if (!origin || !dest) return f;
 
-  const baseProgress = f.routeProgress ?? (f.alt < 500 ? (isHomeAirport(f.origin) ? 0 : 1) : 0.75);
+  const airborne = isAirborne(f);
+  const baseProgress = f.routeProgress ?? (airborne ? 0.75 : (isHomeAirport(f.origin) ? 0 : 1));
   const routeNm = distanceNm(origin, dest);
   const minutes = scrub + (tick % 30) * 0.2;
   const progressRate = routeNm > 0 && f.spd > 0 ? f.spd / 60 / routeNm : 0;
   const progress = clamp(baseProgress + minutes * progressRate, 0, 1);
 
-  if (f.alt < 500) {
+  if (!airborne) {
     const homeCode = isHomeAirport(f.origin) ? f.origin : f.dest;
     const apronBase = APRON_OFFSETS[homeCode] ?? AIRPORTS[homeCode];
     const idx = groundIndex.get(f.id) ?? 0;
@@ -176,11 +185,36 @@ export default function App() {
     return () => clearInterval(i);
   }, []);
 
+  const [scheduleFlights, setScheduleFlights] = useState<Flight[]>([]);
+  const [scheduleStatus, setScheduleStatus] = useState('idle');
+
+  useEffect(() => {
+    const fetchSchedule = () => {
+      setScheduleStatus('loading');
+      Promise.all([
+        fetch('/api/schedule?airport=POS').then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
+        fetch('/api/schedule?airport=TAB').then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
+      ])
+        .then(([pos, tab]) => {
+          setScheduleFlights([...mapAeroApiToFlights(pos, 'POS'), ...mapAeroApiToFlights(tab, 'TAB')]);
+          setScheduleStatus('ok');
+        })
+        .catch((err) => {
+          console.warn('Schedule fetch failed:', err);
+          setScheduleStatus('error');
+        });
+    };
+    fetchSchedule();
+    const i = setInterval(fetchSchedule, 5 * 60 * 1000); // 5 min — schedule data changes slowly, AeroAPI $5/mo credit covers this easily
+    return () => clearInterval(i);
+  }, []);
+
   const liveFlights = useMemo(() => {
+    const baseFlights = scheduleStatus === 'ok' && scheduleFlights.length > 0 ? scheduleFlights : FLIGHTS;
     const liveMap = new Map(openSkyFlights.map((f) => [f.id, f]));
-    const staticIds = new Set(FLIGHTS.map((f) => f.id));
-    const groundIndex = buildGroundIndex(FLIGHTS);
-    const merged = FLIGHTS.map((f) => {
+    const staticIds = new Set(baseFlights.map((f) => f.id));
+    const groundIndex = buildGroundIndex(baseFlights);
+    const merged = baseFlights.map((f) => {
       const live = liveMap.get(f.id);
       if (live && f.status !== 'scheduled' && f.status !== 'landed') {
         return flightOnRoute({ ...f, lat: live.lat, lon: live.lon, alt: live.alt, spd: live.spd, hdg: live.hdg, track: live.track }, tick, scrub, groundIndex);
@@ -191,7 +225,7 @@ export default function App() {
       if (!staticIds.has(f.id)) merged.push(flightOnRoute(f, tick, scrub, groundIndex));
     });
     return merged.filter((f) => tweakState.charter || f.airline !== 'Island Charter');
-  }, [tick, scrub, tweakState.charter, openSkyFlights]);
+  }, [tick, scrub, tweakState.charter, openSkyFlights, scheduleFlights, scheduleStatus]);
 
   const toggleWatch = (id: string) => {
     setWatchlist((w) => {
