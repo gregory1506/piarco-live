@@ -1,6 +1,27 @@
 # Work Log
 
-## 2026-09-01 — Live-data fix: partial progress, HTTPS blocker on VPS proxy
+## 2026-09-01 (session 2) — ADS-B live data fix: RESOLVED
+
+**Root cause of the HTTPS blocker found via direct SSH** (`con-oci` alias → `ubuntu@132.145.130.109`, key `~/.ssh/firevps.key`): the VPS's Caddy reverse proxy at `/home/ubuntu/homelab/caddy/Caddyfile` is a manually-maintained static file with an explicit domain block per app (this is the "external Caddyfile" referenced in cv-site/project-site's old work logs). `opensky.gregstack.xyz` was never added to it. Confirmed via `docker logs caddy` (zero mentions of the domain, ever) and Caddy's own admin API (`localhost:2019/config/` had no trace of it) — not a rate limit, not DNS, not container health, not the Coolify API-managed `fqdn`/`is_force_https_enabled` settings (those don't control this static file at all).
+
+**Fix:** appended a block matching the existing `cv.gregstack.xyz` pattern:
+```
+opensky.gregstack.xyz {
+    encode zstd gzip
+    reverse_proxy host.docker.internal:8080
+}
+```
+Restarted the `caddy` container (`docker restart caddy`) — cert issued within seconds, confirmed via `docker logs`: `"certificate obtained successfully","identifier":"opensky.gregstack.xyz"`.
+
+**End-to-end verification:** `functions/api/opensky.ts` (the Cloudflare Pages Function — permanently dead since Cloudflare's whole network can't reach opensky-network.org) removed. `src/App.tsx` now fetches `https://opensky.gregstack.xyz/api/opensky` directly from the browser. Verified live via Chrome DevTools MCP: request returns 200, no CORS errors, header badge reads "ADS-B LIVE", real aircraft (`BWA527`, `AJT820`, `JBU361`, etc.) render on the map alongside the illustrative demo flights.
+
+**Side note:** while diagnosing, found Caddy stuck in a perpetual failed-cert retry loop for `coolify.gregstack.xyz` itself (repeating every ~2 min, unrelated to this work, pre-existing) — not investigated further, flagged for a future session.
+
+**Files touched (piarco-live):** `src/App.tsx`, deleted `functions/api/opensky.ts`. **Files touched (VPS, outside any repo):** `/home/ubuntu/homelab/caddy/Caddyfile` (backed up first to `Caddyfile.bak-20260901-122706`).
+
+**Status:** Task 3 of the live-data-fix plan (ADS-B) complete. Task 4/5 (real schedule board via AeroAPI) still open — see `next_steps.md`.
+
+## 2026-09-01 (session 1) — Live-data fix: partial progress, HTTPS blocker on VPS proxy
 
 **Context:** The deployed app (piarco-live.pages.dev, from the Aug 2026 Vite/TypeScript SDD rebuild) badges itself "LIVE" but was never actually pulling live data. See `docs/superpowers/specs/2026-08-31-live-data-fix-design.md` and `docs/superpowers/plans/2026-08-31-live-data-fix.md` for the full investigation and plan.
 
