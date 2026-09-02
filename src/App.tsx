@@ -144,6 +144,10 @@ export default function App() {
   const [clock, setClock] = useState(() => nowClock());
   const [detailOpen, setDetailOpen] = useState(true);
   const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [sheetOffset, setSheetOffset] = useState(0);
+  const touchStartY = useRef(0);
+  const touchStartExpanded = useRef(false);
+  const isDragging = useRef(false);
   const [openSkyFlights, setOpenSkyFlights] = useState<Flight[]>([]);
   const [openSkyStatus, setOpenSkyStatus] = useState('idle');
   const openSkyConnected = useRef(false);
@@ -295,6 +299,34 @@ export default function App() {
     return () => window.removeEventListener('message', onMsg);
   }, []);
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 800;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!isMobile) return;
+    touchStartY.current = e.touches[0].clientY;
+    touchStartExpanded.current = sheetExpanded;
+    isDragging.current = true;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isMobile || !isDragging.current) return;
+    const dy = touchStartY.current - e.touches[0].clientY;
+    const clamped = Math.max(-200, Math.min(600, dy));
+    setSheetOffset(clamped);
+  };
+
+  const handleTouchEnd = () => {
+    if (!isMobile) return;
+    const threshold = 60;
+    if (touchStartExpanded.current) {
+      setSheetExpanded(sheetOffset < -threshold);
+    } else {
+      setSheetExpanded(sheetOffset > threshold);
+    }
+    isDragging.current = false;
+    setSheetOffset(0);
+  };
+
   return (
     <div className="app">
       <Ticker />
@@ -312,6 +344,10 @@ export default function App() {
         />
         <div
           className={`right-col ${detailOpen && selected ? 'detail-open' : ''} ${sheetExpanded ? 'sheet-expanded' : ''}`}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={isDragging.current ? { transition: 'none', transform: `translateY(${-sheetOffset}px)` } : undefined}
           onClick={(e) => {
             if ((e.target as HTMLElement).closest('.panel-tabs') && window.innerWidth <= 800) {
               setSheetExpanded((v) => !v);

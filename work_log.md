@@ -25,6 +25,10 @@
 - Added `border-radius: 12px 12px 0 0` and `box-shadow: 0 -4px 24px rgba(0,0,0,0.4)` for bottom-sheet feel.
 - Added `::before` pseudo-element as a drag handle bar (36px × 4px, centered, muted color) at the top of the sheet on mobile.
 
+## 2026-09-02 (session 5) — Phase 4: Drag-to-expand gesture
+
+- `App.tsx`: Added touch drag gesture handling on `.right-col` for mobile. Tracks `touchstart`/`touchmove`/`touchend` with refs (`touchStartY`, `touchStartExpanded`, `isDragging`). During drag, applies `translateY(${-sheetOffset}px)` with `transition: none` for smooth movement. On release, snaps to expanded (swipe up >60px) or collapsed (swipe down >60px). Click-to-toggle on `.panel-tabs` preserved as fallback.
+
 ## 2026-09-01 (session 4) — AeroAPI integration fixes: trails, IATA codes, aircraft types
 
 **Fixed critical rendering issues discovered via Playwright testing after the AeroAPI integration (session 3).**
