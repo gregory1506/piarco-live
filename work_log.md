@@ -29,6 +29,11 @@
 
 - `App.tsx`: Added touch drag gesture handling on `.right-col` for mobile. Tracks `touchstart`/`touchmove`/`touchend` with refs (`touchStartY`, `touchStartExpanded`, `isDragging`). During drag, applies `translateY(${-sheetOffset}px)` with `transition: none` for smooth movement. On release, snaps to expanded (swipe up >60px) or collapsed (swipe down >60px). Click-to-toggle on `.panel-tabs` preserved as fallback.
 
+## 2026-09-02 (session 5) — Phase 5: Live ticker
+
+- `Ticker.tsx`: Complete rewrite. Accepts `flights` prop, generates ticker items dynamically from live data — landed arrivals (teal), delayed flights sorted by delay severity (rose), airborne en-route with altitude/speed (teal), scheduled with ETAs. Static WX/NOTAM items preserved. Items duplicated for seamless CSS scroll loop.
+- `App.tsx`: Passes `liveFlights` to `<Ticker>`.
+
 ## 2026-09-01 (session 4) — AeroAPI integration fixes: trails, IATA codes, aircraft types
 
 **Fixed critical rendering issues discovered via Playwright testing after the AeroAPI integration (session 3).**

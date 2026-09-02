@@ -329,7 +329,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <Ticker />
+      <Ticker flights={liveFlights} />
       <Header clock={clock} openSkyStatus={openSkyStatus} />
       <div className="main">
         <MapCanvas
