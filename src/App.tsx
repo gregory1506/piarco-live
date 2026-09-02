@@ -146,6 +146,7 @@ export default function App() {
   const [sheetExpanded, setSheetExpanded] = useState(false);
   const [openSkyFlights, setOpenSkyFlights] = useState<Flight[]>([]);
   const [openSkyStatus, setOpenSkyStatus] = useState('idle');
+  const openSkyConnected = useRef(false);
   const [tick, setTick] = useState(0);
 
   const mapRef = useRef<MapCanvasHandle>(null);
@@ -159,7 +160,7 @@ export default function App() {
   useEffect(() => {
     const URL = 'https://opensky.gregstack.xyz/api/opensky';
     const fetchFlights = () => {
-      setOpenSkyStatus('loading');
+      if (!openSkyConnected.current) setOpenSkyStatus('loading');
       fetch(URL)
         .then((r) => {
           if (!r.ok) throw new Error(String(r.status));
@@ -168,11 +169,12 @@ export default function App() {
         .then((data) => {
           const flights = ((data.states || []) as unknown[][]).map(openSkyToFlight).filter((f): f is Flight => f !== null);
           setOpenSkyFlights(flights);
+          openSkyConnected.current = true;
           setOpenSkyStatus('ok');
         })
         .catch((err) => {
           console.warn('OpenSky fetch failed:', err);
-          setOpenSkyStatus('error');
+          if (!openSkyConnected.current) setOpenSkyStatus('error');
         });
     };
     fetchFlights();
@@ -184,6 +186,14 @@ export default function App() {
     const i = setInterval(() => setTick((t) => t + 1), 1200);
     return () => clearInterval(i);
   }, []);
+
+  useEffect(() => {
+    if (selectedId) {
+      document.title = `${selectedId} — Piarco Live`;
+    } else {
+      document.title = 'T&T Flight Board · Live Tracker';
+    }
+  }, [selectedId]);
 
   const [scheduleFlights, setScheduleFlights] = useState<Flight[]>([]);
   const [scheduleStatus, setScheduleStatus] = useState('idle');

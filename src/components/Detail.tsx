@@ -61,7 +61,7 @@ export default function DetailDrawer({ flight, onClose }: DetailDrawerProps) {
       <div className="metrics">
         <div className="metric"><div className="k">Altitude</div><div className="v">{flight.alt.toLocaleString()}<small>ft</small></div></div>
         <div className="metric"><div className="k">Ground spd</div><div className="v">{flight.spd}<small>kt</small></div></div>
-        <div className="metric"><div className="k">Heading</div><div className="v">{String(flight.hdg).padStart(3, '0')}<small>°</small></div></div>
+        <div className="metric"><div className="k">Heading</div><div className="v">{String(Math.round(flight.hdg)).padStart(3, '0')}<small>°</small></div></div>
         <div className="metric"><div className="k">{isArrival ? 'Distance' : 'Gate'}</div><div className="v">{isArrival ? flight.dist + 'nm' : flight.gate}</div></div>
       </div>
 

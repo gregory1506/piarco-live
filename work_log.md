@@ -1,5 +1,30 @@
 # Work Log
 
+## 2026-09-02 (session 5) — UI/UX critique + Phase 1 display fixes
+
+**Context:** Piarco Live is already listed in the project portfolio (`project-site/content/projects/piarco-live.md`) with screenshot, tech stack, demo/source links. Portfolio site: `projects.gregstack.xyz`. No changes needed to the portfolio entry.
+
+**Phase 1 fixes applied (display corrections, no layout changes):**
+- `Detail.tsx:64`: Rounded heading from raw decimal (`161.907...°`) to `Math.round()` (`162°`)
+- `styles.css`: Bumped `.map-stat .k`, `.metric .k`, `.scrub-ticks` from 9.5px → 11px for readability
+- `styles.css`: Added `overflow: hidden; text-overflow: ellipsis; white-space: nowrap` to `.metric .v` to prevent value clipping
+- `styles.css`: Changed `.main` grid from `520px` → `600px` right column to give route-viz room
+- `styles.css`: Adjusted `.route-viz` grid to `minmax(80px, 1fr) 60px minmax(80px, 1fr)` so "PORT OF SPAIN" fully renders
+- `styles.css`: Added `overflow-x: visible` to `.detail` to prevent route clipping
+
+**Verified:** Playwright screenshots at 1920px and 390px — all values render fully, no regressions.
+
+## 2026-09-02 (session 5) — Phase 2: Persistent ADS-B badge + dynamic title
+
+- `App.tsx`: Added `openSkyConnected` ref. Status only shows 'loading' on initial fetch; once connected, subsequent refetches don't reset the badge — "ADS-B LIVE" stays visible instead of flickering to "CONNECTING" every 90s.
+- `App.tsx`: Added `useEffect` on `selectedId` that sets `document.title` to `${selectedId} — Piarco Live` when a flight is selected, reverts to base title when deselected.
+
+## 2026-09-02 (session 5) — Phase 3: Mobile detail sheet
+
+- `styles.css` (mobile `@media` block): Changed `.detail` from `position: fixed; inset: 0` (fullscreen) to `bottom: 0; left: 0; right: 0; max-height: 70vh; height: auto` — sheet now sizes to content instead of covering the entire screen.
+- Added `border-radius: 12px 12px 0 0` and `box-shadow: 0 -4px 24px rgba(0,0,0,0.4)` for bottom-sheet feel.
+- Added `::before` pseudo-element as a drag handle bar (36px × 4px, centered, muted color) at the top of the sheet on mobile.
+
 ## 2026-09-01 (session 4) — AeroAPI integration fixes: trails, IATA codes, aircraft types
 
 **Fixed critical rendering issues discovered via Playwright testing after the AeroAPI integration (session 3).**
