@@ -2,17 +2,23 @@
 
 Review this before starting any session. See `work_log.md`'s 2026-09-01 entries for full context, and `docs/superpowers/plans/2026-08-31-live-data-fix.md` for the complete task-by-task plan.
 
-## Now — both live feeds are fully operational
+## Now — UI/stack rebuild (2026-11-09) is deployed
 
-ADS-B positions are live (session 2). AeroAPI schedule board is live with correct rendering (session 4). The full live-data-fix plan is complete.
+The 2026-11-09 rebuild (React 19 / Vite 8 / TS 6, see `work_log.md`) is live at https://piarco-live.pages.dev. No immediate blockers.
 
-No immediate blockers remain.
+- **Deploy:** `npm run deploy` (build + `wrangler pages deploy dist --project-name piarco-live --branch main`; wrangler is a devDependency). Direct-upload project (no Git integration), so pushing to GitHub does not deploy.
+- `wrangler.toml` must keep `compatibility_date`: without it, wrangler 4.159 produced a Functions bundle the runtime rejected (`No such module "node:stream"`).
+- Edge cache confirmed working on `*.pages.dev` (`cf-cache-status: HIT`, `age` header on `/api/metar`).
+- The OpenSky proxy's CORS allow-list accepts `localhost:*` and `piarco-live.pages.dev`, **not** `127.0.0.1` — run `npm run dev` and open `http://localhost:5173`, otherwise the ADS-B badge reads offline.
 
 ## Live and working
 
-- **ADS-B aircraft positions are genuinely live** (fixed 2026-09-01). `src/App.tsx` fetches `https://opensky.gregstack.xyz/api/opensky` directly from the browser — a Node proxy on the Coolify VPS that does OpenSky's OAuth2 client-credentials flow server-side. Header badge reads "ADS-B LIVE" when working.
-- **AeroAPI schedule board is live** (fixed 2026-09-01). `functions/api/schedule.ts` proxies FlightAware AeroAPI via Cloudflare Pages Functions. Board shows real flights with IATA codes, city names, aircraft types, and correct statuses. En-route flights render with trail polylines on the map.
-- `origin/main` on GitHub matches the deployed app (fixed 2026-09-01 — previously diverged for weeks).
+- **ADS-B aircraft positions are genuinely live.** `src/hooks/useFlightData.ts` fetches `https://opensky.gregstack.xyz/api/opensky` directly from the browser — a Node proxy on the Coolify VPS that does OpenSky's OAuth2 client-credentials flow server-side. Reports are matched to scheduled legs by normalized ICAO callsign (`src/data/openSky.ts`); unmatched aircraft render as grey "other traffic".
+- **AeroAPI schedule board is live.** `functions/api/schedule.ts` proxies FlightAware AeroAPI via Cloudflare Pages Functions with a 5-minute edge cache shared by all visitors. `src/data/scheduleFeed.ts` maps it to timestamped legs, de-duplicating POS↔TAB legs that appear in both airports' responses.
+- **Real METAR** for TTPP/TTCP via `functions/api/metar.ts` (aviationweather.gov sends no CORS headers, so it must be proxied). Active runway is derived from wind.
+- If the schedule feed is down, the app shows clearly-labelled demo flights (`src/data/demoFlights.ts`) instead of silently passing them off as live.
+- `npm run dev` proxies `/api/*` to the deployed Pages site (override with `PIARCO_API_ORIGIN`), so local dev shows real data without an AeroAPI key.
+- `origin/main` on GitHub matches the deployed app (2026-11-09).
 
 ## How the VPS proxy deploy pattern actually works (learned the hard way)
 
@@ -42,8 +48,9 @@ If you ever add another VPS-hosted proxy/service, this is the real end-to-end re
 
 ## Later
 
-- Airport surface detail: terminal/apron zones, taxiway/stand approximations for ground aircraft, active-runway-by-wind-direction.
-- Weather: parse real METAR instead of the static copy in the header, add wind barb, cloud ceiling/visibility badges.
+- Airport surface detail: terminal/apron zones, taxiway/stand approximations for ground aircraft.
+- Weather: wind barb on the map, TAF forecast, ceiling overlay.
 - Route polish: clip paths at extreme zoom, add endpoint markers for long-haul origins when zoomed out.
-- Tests: unit test route progress/bearing math, add a smoke test for map+board render.
-- Product scope decision: is this for travelers/meeters, or an ops-style public dashboard? Should charter/cargo be hidden by default?
+- Tests: a browser smoke test for map+board render (unit tests now cover feed mapping, positioning, METAR, ADS-B matching — `npm test`).
+- Airport/airline tables (`src/data/airports.ts`, `src/data/airlines.ts`) only cover operators/routes seen so far; an unknown airport means no route line or estimated position for that leg (board still shows it). Extend as new routes appear.
+- Product scope: cargo/helicopter/non-passenger operators are now hidden by default (Settings → "Cargo & non-passenger").

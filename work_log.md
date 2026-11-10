@@ -1,5 +1,28 @@
 # Work Log
 
+## 2026-11-09 — UI/UX + stack rebuild
+
+**Stack:** React 18→19, Vite 5→8 (Rolldown), `@vitejs/plugin-react` 6, TypeScript 5.6→6.0 (capped below 6.1 by typescript-eslint), new Vitest 5 + ESLint 10 (typescript-eslint, react-hooks v7). `tsc -b` project references: `tsconfig.app.json` (src), `tsconfig.node.json` (vite config), `functions/tsconfig.json` (now typechecked against `@cloudflare/workers-types` — previously not checked at all). Fonts self-hosted via `@fontsource-variable` (Google Fonts links removed). Added favicon, theme-color, description. Scripts: `dev`, `build`, `typecheck`, `lint`, `test`. Dev server proxies `/api/*` to the deployed Pages site and `/api/metar` to aviationweather.gov.
+
+**Correctness bugs fixed:**
+- ADS-B positions were never used for scheduled flights: OpenSky callsigns are ICAO (`BWA523`, `IBE0137`) but matching used the IATA board ident (`BW523`), and matched positions were then overwritten by route interpolation. Now matched by normalized ICAO callsign (`src/data/openSky.ts`) and drawn at the real fix, dead-reckoned when scrubbing.
+- POS↔TAB legs appeared twice (once per airport feed) → duplicate React keys/markers. De-duplicated by `fa_flight_id`.
+- All times were formatted in the viewer's browser timezone but labelled AST. Now `Intl` with `America/Port_of_Spain`; ±1 day badges for yesterday/tomorrow.
+- Delays were always 0 for live data; now derived from scheduled vs estimated/actual times (strike-through scheduled time on the board).
+- A 36-second synthetic "tick" pushed aircraft forward up to 6 min then snapped them back. Positions are now a pure function of time (`src/lib/positions.ts`): schedule wheels-off/on for estimates, ADS-B fix when within 20 min.
+- Every scheduled arrival (even not-yet-departed from abroad) was drawn on the POS apron. Map now only shows aircraft that are actually airborne, about to depart (≤2 h), or just landed (≤45 min).
+- Static fake METAR, fake "NOTAM normal ops" ticker item and fabricated `N0523`-style registrations removed; real METAR via new `functions/api/metar.ts`, real registrations from AeroAPI.
+- Mock data silently replaced the live board on any fetch failure. Demo flights (`src/data/demoFlights.ts`, relative to load time) now only appear with a "Demo data" badge and banner.
+- Settings panel was only reachable via a design-tool `postMessage`; `mapStyle`, `labels`, `density` were never wired. Replaced with a header Settings button; every option is wired and persisted.
+- Wrong ICAO→IATA entries (e.g. `MUIH→MDE`, `TBPJ→FDF`) replaced by a single airport table keyed both ways.
+- AeroAPI proxy now caches at the edge (shared across visitors) instead of each visitor triggering 2 billable calls per 5 min.
+
+**UX:** POS/TAB/Both airport filter; "Now" divider with auto-scroll; Domestic/Caribbean/Long-haul/In-air/Delayed chips; persistent watchlist; cargo/helicopter hidden by default; ADS-B tag on rows; hollow markers = schedule estimate, solid = ADS-B; routes drawn through the aircraft; zoom-to-cursor wheel, double-click zoom, touch pan + pinch, keyboard pan/zoom; keyboard board navigation (↑/↓), Esc, `?` shortcuts list, `F` follow, `N` back to now; accessible tabs/switches/stars; mobile bottom sheet with handle (peek shows rows, expanded shows search/filters) and separate detail sheet; ticker pauses on hover and respects reduced motion.
+
+**Verified:** `npm test` (18 tests: feed mapping, positioning, METAR runway/ceiling, ADS-B matching), `npm run typecheck`, `npm run lint`, `npm run build`. Browser at 1440/1280 desktop and 390 mobile against the real feeds via the dev proxy: live schedule + METAR + ADS-B matched (BWA266/BWA224 placed at real fixes), map drag/wheel/click-select, settings panel, mobile sheet expand + detail sheet, and the demo fallback with `/api/schedule` forced to 503.
+
+**Deployed** 2026-11-09 to https://piarco-live.pages.dev (`wrangler pages deploy`, wrangler 4.159). First attempt failed with `No such module "node:stream"` in the Functions bundle; fixed by pinning `compatibility_date = "2026-11-01"` in `wrangler.toml`. Verified in production: `/`, `/api/metar`, `/api/schedule?airport=POS|TAB` return 200, invalid airport returns 400, edge cache serves hits (`cf-cache-status: HIT`), and the page loads with live schedule, METAR for both stations and ADS-B (18 aircraft) with no console errors.
+
 ## 2026-09-02 (session 5) — UI/UX critique + Phase 1 display fixes
 
 **Context:** Piarco Live is already listed in the project portfolio (`project-site/content/projects/piarco-live.md`) with screenshot, tech stack, demo/source links. Portfolio site: `projects.gregstack.xyz`. No changes needed to the portfolio entry.

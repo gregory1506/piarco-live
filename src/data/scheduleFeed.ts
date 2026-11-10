@@ -1,34 +1,44 @@
 import type { Flight, FlightStatus } from './types';
-import { AIRPORTS, APRON_OFFSETS } from './airports';
+import { findAirport } from './airports';
+import { airlineName, isPassengerOperator } from './airlines';
 
-const ICAO_TO_IATA: Record<string, string> = {
-  TTPP: 'POS', TTCP: 'TAB',
-  KJFK: 'JFK', KMIA: 'MIA', KIAH: 'IAH', KATL: 'ATL', KDFW: 'DFW', KLAX: 'LAX',
-  CYYZ: 'YYZ', CYUL: 'YUL',
-  EGLL: 'LHR', EGKK: 'LGW', EHAM: 'AMS', EDDF: 'FRA', LFPG: 'CDG',
-  MPTO: 'PTY', MUIH: 'MDE',
-  TBPB: 'BGI', TAPA: 'ANU', TLPC: 'UVF', TQPF: 'SVD', TJNA: 'SJU',
-  TISX: 'STX', TNCM: 'SXM', TBPJ: 'FDF',
-  SYCJ: 'GEO', SOCA: 'CAY',
-  MUHA: 'HAV', MDSD: 'SDQ', MJSJ: 'SJU',
-  TVSA: 'SLU',
-  UUEE: 'SVO', OMDB: 'DXB', WIII: 'CGK',
-};
+interface AeroApiAirport {
+  code?: string | null;
+  code_icao?: string | null;
+  code_iata?: string | null;
+  city?: string | null;
+}
 
 interface AeroApiFlight {
   ident: string;
-  ident_iata?: string;
-  operator_iata?: string;
-  origin?: { code: string; code_iata?: string };
-  destination?: { code: string; code_iata?: string };
-  aircraft_type?: string;
-  scheduled_out?: string;
-  scheduled_in?: string;
-  estimated_out?: string;
-  estimated_in?: string;
-  actual_out?: string;
-  actual_in?: string;
-  gate_destination?: string;
+  ident_icao?: string | null;
+  ident_iata?: string | null;
+  fa_flight_id?: string;
+  atc_ident?: string | null;
+  operator?: string | null;
+  operator_icao?: string | null;
+  operator_iata?: string | null;
+  registration?: string | null;
+  aircraft_type?: string | null;
+  type?: string;
+  cancelled?: boolean;
+  diverted?: boolean;
+  origin?: AeroApiAirport | null;
+  destination?: AeroApiAirport | null;
+  scheduled_out?: string | null;
+  estimated_out?: string | null;
+  actual_out?: string | null;
+  scheduled_off?: string | null;
+  estimated_off?: string | null;
+  actual_off?: string | null;
+  scheduled_on?: string | null;
+  estimated_on?: string | null;
+  actual_on?: string | null;
+  scheduled_in?: string | null;
+  estimated_in?: string | null;
+  actual_in?: string | null;
+  gate_origin?: string | null;
+  gate_destination?: string | null;
   status?: string;
 }
 
@@ -39,103 +49,85 @@ interface AeroApiResponse {
   scheduled_departures?: AeroApiFlight[];
 }
 
-function resolveIata(code: string | undefined, fallback: string): string {
-  if (!code) return fallback;
-  if (AIRPORTS[code]) return code;
-  return ICAO_TO_IATA[code] ?? fallback;
+function ms(...isos: (string | null | undefined)[]): number | undefined {
+  for (const iso of isos) {
+    if (iso) {
+      const t = Date.parse(iso);
+      if (!Number.isNaN(t)) return t;
+    }
+  }
+  return undefined;
 }
 
-function toHHMM(iso: string | undefined): string {
-  if (!iso) return '--:--';
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-function toStatus(raw: string | undefined): FlightStatus {
-  const s = (raw || '').toLowerCase();
-  if (s.includes('land')) return 'landed';
-  if (s.includes('cancel')) return 'canceled';
+function toStatus(f: AeroApiFlight): FlightStatus {
+  if (f.cancelled) return 'canceled';
+  if (f.diverted) return 'diverted';
+  const s = (f.status ?? '').toLowerCase();
+  if (s.startsWith('arrived')) return 'arrived';
+  if (s.includes('landed')) return 'landed';
+  if (s.includes('en route') || s.includes('departed')) return 'enroute';
   if (s.includes('taxi')) return 'taxi';
-  if (s.includes('arrived') || s.includes('gate arrival')) return 'landed';
-  if (s.includes('en route') || s.includes('depart') || s.includes('air')) return 'enroute';
-  if (s.includes('estimated') || s.includes('delayed')) return 'scheduled';
   return 'scheduled';
 }
 
-function calcProgress(f: AeroApiFlight): number {
-  const rawStatus = (f.status || '').toLowerCase();
-  if (rawStatus.includes('land')) return 1;
-
-  const now = Date.now();
-  const depart = f.actual_out || f.estimated_out || f.scheduled_out;
-  const arrive = f.estimated_in || f.scheduled_in;
-  if (!depart || !arrive) return 0;
-
-  const departMs = new Date(depart).getTime();
-  const arriveMs = new Date(arrive).getTime();
-  if (arriveMs <= departMs) return 0;
-
-  const elapsed = now - departMs;
-  const total = arriveMs - departMs;
-  return Math.max(0, Math.min(1, elapsed / total));
+function endpoint(a: AeroApiAirport | null | undefined): { code: string; city: string } | null {
+  if (!a) return null;
+  const known = findAirport(a.code_iata) ?? findAirport(a.code_icao) ?? findAirport(a.code);
+  const code = known?.iata ?? a.code_iata ?? a.code_icao ?? a.code;
+  if (!code) return null;
+  return { code, city: known?.city ?? a.city ?? code };
 }
 
-function mapOne(f: AeroApiFlight, homeCode: 'POS' | 'TAB', direction: 'departure' | 'arrival'): Flight | null {
-  const isDeparture = direction === 'departure';
-  const otherCode = isDeparture
-    ? resolveIata(f.destination?.code_iata ?? f.destination?.code, '???')
-    : resolveIata(f.origin?.code_iata ?? f.origin?.code, '???');
-  if (otherCode === '???') return null;
-
-  const origin = isDeparture ? homeCode : otherCode;
-  const dest = isDeparture ? otherCode : homeCode;
-  const apron = APRON_OFFSETS[homeCode] ?? AIRPORTS[homeCode];
-  const status = toStatus(f.status);
-  const progress = calcProgress(f);
-  const airborne = status === 'enroute' && progress > 0;
+function mapOne(f: AeroApiFlight): Flight | null {
+  const origin = endpoint(f.origin);
+  const dest = endpoint(f.destination);
+  if (!origin || !dest) return null;
+  const operator = f.operator_icao ?? f.operator ?? null;
 
   return {
+    key: f.fa_flight_id ?? `${f.ident}-${f.scheduled_out ?? ''}`,
+    kind: 'scheduled',
     id: (f.ident_iata ?? f.ident).replace(/\s+/g, ''),
-    airline: f.operator_iata ?? f.ident.slice(0, 2),
-    type: f.aircraft_type ?? '???',
-    origin,
-    dest,
-    status,
-    eta: toHHMM(f.estimated_in ?? f.scheduled_in),
-    dep: toHHMM(f.scheduled_out),
-    gate: f.gate_destination ?? '\u2014',
-    lat: apron.lat,
-    lon: apron.lon,
-    alt: airborne ? 35000 : 0,
-    spd: airborne ? 450 : 0,
-    hdg: 0,
-    track: airborne ? 'cruise' : 'gate',
-    dist: 0,
-    delay: 0,
-    routeProgress: airborne ? progress : 0,
+    callsign: (f.atc_ident ?? f.ident_icao ?? f.ident).replace(/\s+/g, ''),
+    airline: airlineName(operator, f.operator_iata ?? operator ?? f.ident.slice(0, 3)),
+    type: f.aircraft_type ?? '',
+    registration: f.registration ?? undefined,
+    origin: origin.code,
+    dest: dest.code,
+    originCity: origin.city,
+    destCity: dest.city,
+    status: toStatus(f),
     sourceStatus: f.status,
+    schedDep: ms(f.scheduled_out, f.scheduled_off),
+    estDep: ms(f.actual_out, f.estimated_out, f.scheduled_out),
+    schedArr: ms(f.scheduled_in, f.scheduled_on),
+    estArr: ms(f.actual_in, f.estimated_in, f.actual_on, f.estimated_on, f.scheduled_in),
+    offAt: ms(f.actual_off, f.estimated_off, f.scheduled_off),
+    onAt: ms(f.actual_on, f.estimated_on, f.scheduled_on),
+    gateDep: f.gate_origin ?? undefined,
+    gateArr: f.gate_destination ?? undefined,
+    passenger: (f.type ?? 'Airline') === 'Airline' && isPassengerOperator(operator),
   };
 }
 
-export function mapAeroApiToFlights(raw: unknown, homeCode: 'POS' | 'TAB'): Flight[] {
-  const data = raw as AeroApiResponse;
-  const all = [
-    ...(data.arrivals ?? []),
-    ...(data.departures ?? []),
-    ...(data.scheduled_arrivals ?? []),
-    ...(data.scheduled_departures ?? []),
-  ];
-  const seen = new Set<string>();
-  const out: Flight[] = [];
-
-  for (const f of all) {
-    if (seen.has(f.ident)) continue;
-    seen.add(f.ident);
-
-    const isDeparture = f.origin?.code === 'TTPP' || f.origin?.code === 'TTCP';
-    const direction = isDeparture ? 'departure' : 'arrival';
-    const mapped = mapOne(f, homeCode, direction);
-    if (mapped) out.push(mapped);
+/**
+ * Maps AeroAPI `/airports/{id}/flights` responses to flights. A POS↔TAB leg
+ * appears in both airports' responses; legs are de-duplicated by fa_flight_id.
+ */
+export function mapAeroApiFlights(responses: unknown[]): Flight[] {
+  const out = new Map<string, Flight>();
+  for (const raw of responses) {
+    const data = (raw ?? {}) as AeroApiResponse;
+    const all = [
+      ...(data.arrivals ?? []),
+      ...(data.departures ?? []),
+      ...(data.scheduled_arrivals ?? []),
+      ...(data.scheduled_departures ?? []),
+    ];
+    for (const f of all) {
+      const mapped = mapOne(f);
+      if (mapped && !out.has(mapped.key)) out.set(mapped.key, mapped);
+    }
   }
-  return out;
+  return [...out.values()];
 }

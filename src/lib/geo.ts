@@ -15,8 +15,9 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+const EARTH_RADIUS_NM = 3440.065;
+
 export function distanceNm(a: LatLon, b: LatLon): number {
-  const rNm = 3440.065;
   const lat1 = (a.lat * Math.PI) / 180;
   const lat2 = (b.lat * Math.PI) / 180;
   const dLat = lat2 - lat1;
@@ -24,7 +25,7 @@ export function distanceNm(a: LatLon, b: LatLon): number {
   const h =
     Math.sin(dLat / 2) ** 2 +
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * rNm * Math.asin(Math.sqrt(h));
+  return 2 * EARTH_RADIUS_NM * Math.asin(Math.sqrt(h));
 }
 
 /** Offsets a point by a bearing (degrees) and distance (meters). Flat-earth
@@ -46,4 +47,15 @@ export function apronSlot(base: LatLon, index: number, spacingM = 60): LatLon {
   const col = index % 4;
   const east = offsetLatLon(base, 90, col * spacingM);
   return offsetLatLon(east, 180, row * spacingM);
+}
+
+/** Point reached travelling `nm` nautical miles from `origin` on initial bearing `bearingDeg`. */
+export function destinationPoint(origin: LatLon, bearingDeg: number, nm: number): LatLon {
+  const d = nm / EARTH_RADIUS_NM;
+  const brg = (bearingDeg * Math.PI) / 180;
+  const lat1 = (origin.lat * Math.PI) / 180;
+  const lon1 = (origin.lon * Math.PI) / 180;
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(brg));
+  const lon2 = lon1 + Math.atan2(Math.sin(brg) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+  return { lat: (lat2 * 180) / Math.PI, lon: (((lon2 * 180) / Math.PI + 540) % 360) - 180 };
 }

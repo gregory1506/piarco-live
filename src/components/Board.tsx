@@ -1,216 +1,296 @@
-import { useMemo, useState } from 'react';
-import type { Flight } from '../data/types';
-import { HOME_AIRPORTS } from '../data/airports';
-import { CITIES, FEED_META } from '../data/flights';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import type { PlacedFlight } from '../data/types';
+import type { ScheduleSource } from '../hooks/useFlightData';
+import {
+  DELAY_THRESHOLD_MIN,
+  boardTimes,
+  delayMinutes,
+  homeEnd,
+  isAirborne,
+  onBoard,
+  otherEnd,
+  routeClass,
+  statusLabel,
+  type AirportFilter,
+  type BoardMode,
+} from '../lib/flights';
+import { dayOffset, formatHM } from '../lib/time';
+
+type Chip = 'all' | 'air' | 'delayed' | 'domestic' | 'regional' | 'longhaul';
+
+const CHIPS: { k: Chip; l: string }[] = [
+  { k: 'all', l: 'All' },
+  { k: 'air', l: 'In air' },
+  { k: 'delayed', l: 'Delayed' },
+  { k: 'domestic', l: 'Domestic' },
+  { k: 'regional', l: 'Caribbean' },
+  { k: 'longhaul', l: 'Long-haul' },
+];
 
 interface BoardProps {
-  flights: Flight[];
-  mode: 'arrivals' | 'departures';
-  setMode: (m: 'arrivals' | 'departures') => void;
-  selectedId: string;
-  onSelect: (id: string) => void;
-  watchlist: Set<string>;
+  flights: PlacedFlight[];
+  source: ScheduleSource;
+  now: number;
+  mode: BoardMode;
+  setMode: (m: BoardMode) => void;
+  airport: AirportFilter;
+  setAirport: (a: AirportFilter) => void;
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+  hoveredKey: string | null;
+  onHover: (key: string | null) => void;
+  watchlist: string[];
   toggleWatch: (id: string) => void;
   query: string;
   setQuery: (q: string) => void;
-  showWatchOnly: boolean;
-  setShowWatchOnly: (v: boolean) => void;
-  hoveredId: string | null;
-  onHoverFlight: (id: string | null) => void;
-  searchInputRef: React.RefObject<HTMLInputElement>;
+  watchOnly: boolean;
+  setWatchOnly: (v: boolean) => void;
+  searchRef: RefObject<HTMLInputElement | null>;
 }
 
-function isHomeAirport(code: string): boolean {
-  return HOME_AIRPORTS.includes(code);
+function TimeCell({ sched, est, now }: { sched?: number; est?: number; now: number }) {
+  const shown = sched ?? est;
+  const day = shown != null ? dayOffset(shown, now) : 0;
+  const late = sched != null && est != null && Math.round((est - sched) / 60_000);
+  return (
+    <span className="time mono">
+      <span className="sched">
+        {formatHM(shown)}
+        {day !== 0 && <sup className="day" title={day > 0 ? 'Tomorrow' : 'Yesterday'}>{day > 0 ? `+${day}d` : `${day}d`}</sup>}
+      </span>
+      {late && Math.abs(late) >= 5 ? (
+        <span className={`est ${late >= DELAY_THRESHOLD_MIN ? 'late' : late < 0 ? 'early' : ''}`}>{formatHM(est)}</span>
+      ) : null}
+    </span>
+  );
 }
 
-export function addMinutes(hhmm: string, delta: number): string {
-  const [h, m] = hhmm.split(':').map(Number);
-  const total = (h * 60 + m + delta) % (24 * 60);
-  const H = Math.floor(total / 60);
-  const M = total % 60;
-  return `${String(H).padStart(2, '0')}:${String(M).padStart(2, '0')}`;
-}
+export default function Board(props: BoardProps) {
+  const { flights, source, now, mode, setMode, airport, setAirport, selectedKey, onSelect, hoveredKey, onHover } = props;
+  const { watchlist, toggleWatch, query, setQuery, watchOnly, setWatchOnly, searchRef } = props;
+  const [chip, setChip] = useState<Chip>('all');
+  const listRef = useRef<HTMLDivElement>(null);
+  const nowRowRef = useRef<HTMLDivElement>(null);
 
-const FILTERS: { k: string; l: string }[] = [
-  { k: 'all', l: 'ALL' },
-  { k: 'onair', l: 'IN AIR' },
-  { k: 'ground', l: 'GROUND' },
-  { k: 'delayed', l: 'DELAYED' },
-  { k: 'intl', l: 'INTL' },
-  { k: 'regional', l: 'REGIONAL' },
-];
+  const counts = useMemo(
+    () => ({
+      arrivals: flights.filter((f) => onBoard(f, 'arrivals', airport)).length,
+      departures: flights.filter((f) => onBoard(f, 'departures', airport)).length,
+    }),
+    [flights, airport],
+  );
 
-const REGIONAL_CODES = ['POS', 'TAB', 'BGI', 'ANU', 'UVF', 'SVD', 'GEO'];
+  const rows = useMemo(() => {
+    const watched = new Set(watchlist);
+    const q = query.trim().toLowerCase();
+    return flights
+      .filter((f) => onBoard(f, mode, airport))
+      .filter((f) => {
+        if (chip === 'air') return isAirborne(f);
+        if (chip === 'delayed') return delayMinutes(f, mode) >= DELAY_THRESHOLD_MIN || f.status === 'canceled';
+        if (chip === 'domestic' || chip === 'regional' || chip === 'longhaul') return routeClass(f) === chip;
+        return true;
+      })
+      .filter((f) => !watchOnly || watched.has(f.id))
+      .filter((f) => {
+        if (!q) return true;
+        const other = otherEnd(f, mode);
+        return [f.id, f.callsign, f.airline, other.code, other.city, f.registration ?? '', f.type].some((s) =>
+          s.toLowerCase().includes(q),
+        );
+      })
+      .sort((a, b) => (boardTimes(a, mode).sched ?? 0) - (boardTimes(b, mode).sched ?? 0));
+  }, [flights, mode, airport, chip, watchOnly, watchlist, query]);
 
-export default function Board({
-  flights,
-  mode,
-  setMode,
-  selectedId,
-  onSelect,
-  watchlist,
-  toggleWatch,
-  query,
-  setQuery,
-  showWatchOnly,
-  setShowWatchOnly,
-  hoveredId,
-  onHoverFlight,
-  searchInputRef,
-}: BoardProps) {
-  const [filter, setFilter] = useState('all');
+  // Index of the first flight still to come; the NOW divider goes before it.
+  const nowIndex = rows.findIndex((f) => {
+    const { sched, est } = boardTimes(f, mode);
+    return (est ?? sched ?? 0) >= now;
+  });
+
+  // Bring "now" into view whenever the board context changes.
+  const scrollKey = `${mode}|${airport}|${source}|${chip}`;
+  const lastScrollKey = useRef('');
+  useEffect(() => {
+    if (lastScrollKey.current === scrollKey || rows.length === 0) return;
+    lastScrollKey.current = scrollKey;
+    const list = listRef.current;
+    const marker = nowRowRef.current;
+    if (list && marker) list.scrollTop = Math.max(0, marker.offsetTop - list.clientHeight * 0.25);
+  }, [scrollKey, rows.length]);
+
+  const onListKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const buttons = [...(listRef.current?.querySelectorAll<HTMLButtonElement>('.row-main') ?? [])];
+    if (buttons.length === 0) return;
+    e.preventDefault();
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const next =
+      current === -1 ? 0 : Math.max(0, Math.min(buttons.length - 1, current + (e.key === 'ArrowDown' ? 1 : -1)));
+    buttons[next].focus();
+    buttons[next].click();
+  };
 
   const isArrival = mode === 'arrivals';
-  const scoped = useMemo(() => {
-    let list = flights.filter((f) => (isArrival ? isHomeAirport(f.dest) : isHomeAirport(f.origin)));
-    if (filter !== 'all') {
-      if (filter === 'delayed') list = list.filter((f) => f.delay >= 10);
-      else if (filter === 'onair') list = list.filter((f) => f.alt > 500);
-      else if (filter === 'ground') list = list.filter((f) => f.alt < 500);
-      else if (filter === 'intl')
-        list = list.filter((f) => !isHomeAirport(isArrival ? f.origin : f.dest) && !REGIONAL_CODES.includes(isArrival ? f.origin : f.dest));
-      else if (filter === 'regional') list = list.filter((f) => REGIONAL_CODES.includes(isArrival ? f.origin : f.dest));
-    }
-    if (showWatchOnly) list = list.filter((f) => watchlist.has(f.id));
-    if (query) {
-      const q = query.toLowerCase();
-      list = list.filter(
-        (f) =>
-          f.id.toLowerCase().includes(q) ||
-          f.airline.toLowerCase().includes(q) ||
-          (CITIES[isArrival ? f.origin : f.dest] || '').toLowerCase().includes(q) ||
-          (isArrival ? f.origin : f.dest).toLowerCase().includes(q)
-      );
-    }
-    return list.sort((a, b) => (isArrival ? a.eta : a.dep).localeCompare(isArrival ? b.eta : b.dep));
-  }, [flights, isArrival, filter, showWatchOnly, watchlist, query]);
-
-  const arrivalsCount = flights.filter((f) => isHomeAirport(f.dest)).length;
-  const departuresCount = flights.filter((f) => isHomeAirport(f.origin)).length;
-
-  const statusLabel = (f: Flight) => {
-    if (f.delay >= 15) return { text: 'DELAY ' + f.delay + "'", cls: 'st-delay' };
-    if (f.status === 'landed') return { text: 'LANDED', cls: 'st-landed' };
-    if (f.status === 'canceled') return { text: 'CANCELED', cls: 'st-delay' };
-    if (f.status === 'enroute') return { text: 'EN ROUTE', cls: 'st-enroute' };
-    if (f.status === 'departing') return { text: 'DEPARTED', cls: 'st-departing' };
-    if (f.status === 'boarding') return { text: 'BOARDING', cls: 'st-boarding' };
-    if (f.status === 'taxi') return { text: 'TAXI', cls: 'st-taxi' };
-    if (f.status === 'scheduled') return { text: 'SCHED', cls: 'st-scheduled' };
-    return { text: (f.status as string).toUpperCase(), cls: 'st-scheduled' };
-  };
-
-  const progress = (f: Flight) => {
-    if (isHomeAirport(f.origin)) return null;
-    const total = 600;
-    return Math.max(0.02, Math.min(0.99, 1 - f.dist / total));
-  };
 
   return (
-    <div className="panel">
-      <div className="panel-tabs">
-        <button className={`tab ${mode === 'arrivals' ? 'active' : ''}`} onClick={() => setMode('arrivals')}>
-          Arrivals <span className="count">{arrivalsCount}</span>
-        </button>
-        <button className={`tab ${mode === 'departures' ? 'active' : ''}`} onClick={() => setMode('departures')}>
-          Departures <span className="count">{departuresCount}</span>
-        </button>
-        <div className="tab-actions">
-          <button className={`icon-btn ${showWatchOnly ? 'active' : ''}`} title="Watchlist only" onClick={() => setShowWatchOnly(!showWatchOnly)}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill={showWatchOnly ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-              <polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9" />
-            </svg>
+    <section className="panel" aria-label="Flight board">
+      <div className="panel-tabs" role="tablist" aria-label="Board">
+        {(['arrivals', 'departures'] as const).map((m) => (
+          <button
+            key={m}
+            role="tab"
+            aria-selected={mode === m}
+            className={`tab ${mode === m ? 'active' : ''}`}
+            onClick={() => setMode(m)}
+          >
+            {m === 'arrivals' ? 'Arrivals' : 'Departures'} <span className="count">{counts[m]}</span>
           </button>
+        ))}
+        <div className="seg airport-seg" role="radiogroup" aria-label="Airport">
+          {(['POS', 'TAB', 'ALL'] as const).map((a) => (
+            <button key={a} role="radio" aria-checked={airport === a} className={airport === a ? 'on' : ''} onClick={() => setAirport(a)}>
+              {a === 'ALL' ? 'Both' : a}
+            </button>
+          ))}
         </div>
       </div>
 
       <div className="filter-row">
-        <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--line)', borderRadius: 2, padding: '0 8px', gap: 6, flex: '0 0 auto', background: 'var(--bg)' }}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--text-mute)' }}>
-            <circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" />
+        <label className="search">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <line x1="21" y1="21" x2="16.5" y2="16.5" />
           </svg>
           <input
-            ref={searchInputRef}
-            placeholder={isArrival ? 'Flight, origin, or airport…' : 'Flight, destination, or airport…'}
+            ref={searchRef}
+            type="search"
+            aria-label="Search flights"
+            placeholder={isArrival ? 'Flight, airline or origin' : 'Flight, airline or destination'}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            style={{ background: 'transparent', border: 0, outline: 'none', color: 'var(--text)', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, padding: '5px 0', width: 150 }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setQuery('');
+                e.currentTarget.blur();
+              }
+            }}
           />
-        </div>
-        {FILTERS.map((c) => (
-          <button key={c.k} className={`chip ${filter === c.k ? 'on' : ''}`} onClick={() => setFilter(c.k)}>
-            {c.l}
+          <kbd aria-hidden="true">/</kbd>
+        </label>
+        <div className="chips" role="group" aria-label="Filter">
+          {CHIPS.map((c) => (
+            <button key={c.k} className={`chip ${chip === c.k ? 'on' : ''}`} aria-pressed={chip === c.k} onClick={() => setChip(c.k)}>
+              {c.l}
+            </button>
+          ))}
+          <button
+            className={`chip chip-star ${watchOnly ? 'on' : ''}`}
+            aria-pressed={watchOnly}
+            onClick={() => setWatchOnly(!watchOnly)}
+            title="Only flights you are watching"
+          >
+            ★ Watching{watchlist.length ? ` ${watchlist.length}` : ''}
           </button>
-        ))}
+        </div>
       </div>
 
-      {FEED_META?.TAB && (
-        <div className="feed-note">
-          <span className="mono">TAB FEED</span>
-          <span>{FEED_META.TAB.date}</span>
-          <span>{FEED_META.TAB.source}</span>
+      {source === 'demo' && (
+        <div className="banner" role="status">
+          Live schedule unavailable — showing illustrative demo flights.
         </div>
       )}
 
-      <div className="board">
-        <div className="board-header">
-          <div></div>
-          <div>Flight</div>
-          <div>{isArrival ? 'Origin' : 'Destination'}</div>
-          <div>{isArrival ? 'ETA' : 'Dep'}</div>
-          <div>Gate</div>
-          <div>Status</div>
-          <div></div>
-        </div>
-        {scoped.length === 0 && <div className="empty">No flights match.</div>}
-        {scoped.map((f) => {
-          const s = statusLabel(f);
-          const airport = isArrival ? f.origin : f.dest;
-          const time = isArrival ? f.eta : f.dep;
-          const prog = progress(f);
-          const isSel = f.id === selectedId;
-          const isHovered = f.id === hoveredId;
-          const starred = watchlist.has(f.id);
+      <div className="board-head" aria-hidden="true">
+        <span />
+        <span>Flight</span>
+        <span>{isArrival ? 'From' : 'To'}</span>
+        <span>{isArrival ? 'Arr' : 'Dep'}</span>
+        <span>Gate</span>
+        <span>Status</span>
+      </div>
+      <div className="board" ref={listRef} onKeyDown={onListKeyDown}>
+        {source === 'loading' && rows.length === 0 && <div className="empty">Loading flights…</div>}
+        {source !== 'loading' && rows.length === 0 && (
+          <div className="empty">
+            {watchOnly ? 'No watched flights here. Star a flight to follow it.' : 'No flights match.'}
+            {(query || chip !== 'all' || watchOnly) && (
+              <button
+                className="link-btn"
+                onClick={() => {
+                  setQuery('');
+                  setChip('all');
+                  setWatchOnly(false);
+                }}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
+        {rows.map((f, i) => {
+          const status = statusLabel(f, mode);
+          const other = otherEnd(f, mode);
+          const times = boardTimes(f, mode);
+          const starred = watchlist.includes(f.id);
+          const gate = isArrival ? f.gateArr : f.gateDep;
+          const showProgress = isArrival && f.pos && isAirborne(f);
           return (
-            <div
-              key={f.id}
-              className={`row ${isSel ? 'selected' : ''} ${isHovered ? 'hovered' : ''}`}
-              onClick={() => onSelect(f.id)}
-              onMouseEnter={() => onHoverFlight(f.id)}
-              onMouseLeave={() => onHoverFlight(null)}
-            >
-              <button className={`star ${starred ? 'on' : ''}`} onClick={(e) => { e.stopPropagation(); toggleWatch(f.id); }}>★</button>
-              <div className="flt mono">
-                <span>{f.id}</span>
-                <div className="al mono" style={{ fontSize: 9.5, letterSpacing: '0.08em', marginTop: 2 }}>{f.type} · {f.airline}</div>
-              </div>
-              <div>
-                <div className="city">{CITIES[airport] || airport}</div>
-                <div className="city-sub">{airport} · {f.airline}</div>
-              </div>
-              <div className="time mono">
-                {f.delay >= 10 ? (
-                  <>
-                    <span>{addMinutes(time, f.delay)}</span>
-                    <span className="sched">{time}</span>
-                  </>
-                ) : (
-                  time
-                )}
-              </div>
-              <div className="gate">{f.gate}</div>
-              <div><span className={`status ${s.cls}`}>{s.text}</span></div>
-              <div className="mute mono" style={{ textAlign: 'right', fontSize: 10 }}>
-                {isArrival && f.alt > 500 ? Math.round(f.dist) + 'nm' : ''}
-              </div>
-              {isArrival && prog !== null && (
-                <div className="progress"><div className="fill" style={{ width: prog * 100 + '%' }} /></div>
+            <div key={f.key} className="row-wrap">
+              {i === nowIndex && (
+                <div className="now-divider" ref={nowRowRef}>
+                  <span>Now · {formatHM(now)}</span>
+                </div>
               )}
+              <div
+                className={`row ${f.key === selectedKey ? 'selected' : ''} ${f.key === hoveredKey ? 'hovered' : ''} ${
+                  f.status === 'canceled' ? 'canceled' : ''
+                }`}
+                onMouseEnter={() => onHover(f.key)}
+                onMouseLeave={() => onHover(null)}
+              >
+                <button
+                  className={`star ${starred ? 'on' : ''}`}
+                  aria-pressed={starred}
+                  aria-label={`${starred ? 'Stop watching' : 'Watch'} ${f.id}`}
+                  onClick={() => toggleWatch(f.id)}
+                >
+                  ★
+                </button>
+                <button className="row-main" aria-current={f.key === selectedKey} onClick={() => onSelect(f.key)}>
+                  <span className="flt">
+                    <span className="mono">{f.id}</span>
+                    <span className="sub">{f.airline}</span>
+                  </span>
+                  <span className="place">
+                    <span className="city">{other.city}</span>
+                    <span className="sub mono">
+                      {isArrival ? `${other.code} → ${homeEnd(f, mode)}` : `${homeEnd(f, mode)} → ${other.code}`}
+                      {f.type && ` · ${f.type}`}
+                    </span>
+                  </span>
+                  <TimeCell sched={times.sched} est={times.est} now={now} />
+                  <span className="gate mono">{gate ?? '—'}</span>
+                  <span>
+                    <span className={`status tone-${status.tone}`}>{status.text}</span>
+                    {f.pos?.live && <span className="live-tag" title="Live ADS-B position">ADS-B</span>}
+                  </span>
+                  {showProgress && (
+                    <span className="progress" aria-hidden="true">
+                      <span className="fill" style={{ width: `${Math.round((f.pos?.progress ?? 0) * 100)}%` }} />
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
           );
         })}
+        {nowIndex === -1 && rows.length > 0 && (
+          <div className="now-divider" ref={nowRowRef}>
+            <span>Now · {formatHM(now)}</span>
+          </div>
+        )}
       </div>
-    </div>
+    </section>
   );
 }

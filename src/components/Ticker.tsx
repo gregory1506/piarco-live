@@ -1,74 +1,65 @@
 import { useMemo } from 'react';
-import type { Flight } from '../data/types';
-import { CITIES } from '../data/flights';
+import type { PlacedFlight } from '../data/types';
+import type { Metar } from '../data/metar';
+import { isHomeAirport } from '../data/airports';
+import { DELAY_THRESHOLD_MIN, delayMinutes, type BoardMode } from '../lib/flights';
+import { formatHM } from '../lib/time';
 
-type TickerItem = [string, string, string, string];
-
-const STATIC_ITEMS: TickerItem[] = [
-  ['WX', 'TTPP 24°C · TTCP 26°C', 'VIS 10SM', ''],
-  ['NOTAM', 'TTPP / TTCP', 'normal ops', ''],
-];
-
-function city(code: string): string {
-  return CITIES[code] || code;
+interface TickerItem {
+  tag: string;
+  tone: 'up' | 'down' | '';
+  title: string;
+  detail: string;
 }
 
-function buildFlightItems(flights: Flight[]): TickerItem[] {
+function buildItems(flights: PlacedFlight[], metars: Metar[]): TickerItem[] {
   const items: TickerItem[] = [];
+  const scheduled = flights.filter((f) => f.kind === 'scheduled');
+  const mode = (f: PlacedFlight): BoardMode => (isHomeAirport(f.dest) ? 'arrivals' : 'departures');
 
-  const landed = flights
-    .filter((f) => f.status === 'landed')
-    .slice(0, 2);
-  for (const f of landed) {
-    items.push(['LANDED', `${f.id} ex ${city(f.origin)}`, `${f.airline} · on stand ${f.gate || '—'}`, 'up']);
+  for (const f of scheduled.filter((f) => f.status === 'landed' || f.status === 'arrived').slice(0, 3)) {
+    items.push({ tag: 'LANDED', tone: 'up', title: `${f.id} from ${f.originCity}`, detail: `${f.airline}${f.gateArr ? ` · gate ${f.gateArr}` : ''}` });
   }
-
-  const delayed = flights
-    .filter((f) => f.delay > 0 && f.status !== 'landed')
-    .sort((a, b) => b.delay - a.delay)
-    .slice(0, 2);
+  const delayed = scheduled
+    .filter((f) => f.status !== 'landed' && f.status !== 'arrived' && delayMinutes(f, mode(f)) >= DELAY_THRESHOLD_MIN)
+    .sort((a, b) => delayMinutes(b, mode(b)) - delayMinutes(a, mode(a)))
+    .slice(0, 3);
   for (const f of delayed) {
-    items.push(['DELAY', `${f.id} ex ${city(f.origin)} to ${city(f.dest)}`, `+${f.delay} min`, 'down']);
+    items.push({ tag: 'DELAY', tone: 'down', title: `${f.id} ${f.originCity} → ${f.destCity}`, detail: `+${delayMinutes(f, mode(f))} min` });
   }
-
-  const enroute = flights
-    .filter((f) => f.status === 'enroute' || f.track === 'cruise' || f.track === 'climbing' || f.track === 'descending')
-    .slice(0, 2);
-  for (const f of enroute) {
-    const dir = f.origin === 'POS' || f.origin === 'TAB' ? `to ${city(f.dest)}` : `ex ${city(f.origin)}`;
-    items.push(['AIRBORNE', `${f.id} ${dir}`, `${f.alt.toLocaleString()}ft · ${f.spd}kt`, 'up']);
+  for (const f of scheduled.filter((f) => f.status === 'canceled').slice(0, 2)) {
+    items.push({ tag: 'CANCELED', tone: 'down', title: `${f.id} ${f.originCity} → ${f.destCity}`, detail: f.airline });
   }
-
-  const scheduled = flights
-    .filter((f) => f.status === 'scheduled' && f.eta)
-    .slice(0, 2);
-  for (const f of scheduled) {
-    items.push(['SCHED', `${f.id} ex ${city(f.origin)}`, `ETA ${f.eta}`, '']);
+  for (const f of scheduled.filter((f) => f.status === 'enroute' && f.pos && isHomeAirport(f.dest)).slice(0, 3)) {
+    items.push({
+      tag: 'INBOUND',
+      tone: 'up',
+      title: `${f.id} from ${f.originCity}`,
+      detail: `ETA ${formatHM(f.estArr)}${f.pos?.live ? ` · ${f.pos.altFt.toLocaleString()}ft` : ''}`,
+    });
   }
-
+  for (const m of metars) {
+    items.push({ tag: 'WX', tone: '', title: m.station, detail: m.raw.replace(/^METAR\s+\S+\s+/, '') });
+  }
   return items;
 }
 
-interface TickerProps {
-  flights?: Flight[];
-}
-
-export default function Ticker({ flights = [] }: TickerProps) {
-  const items = useMemo(() => {
-    const flightItems = buildFlightItems(flights);
-    const all = [...flightItems, ...STATIC_ITEMS];
-    return [...all, ...all];
-  }, [flights]);
-
+export default function Ticker({ flights, metars }: { flights: PlacedFlight[]; metars: Metar[] }) {
+  const items = useMemo(() => buildItems(flights, metars), [flights, metars]);
+  if (items.length === 0) return <div className="ticker" aria-hidden="true" />;
+  // Rendered twice back-to-back so the CSS marquee loops seamlessly.
+  const loop = [...items, ...items];
   return (
-    <div className="ticker">
-      <div className="ticker-label">TT AIRPORTS · LIVE</div>
-      <div className="ticker-track">
-        {items.map((t, i) => (
-          <span className="ticker-item" key={i}>
-            <span className={t[3]}>{t[0]}</span> <b>{t[1]}</b> <span className="mute">·</span> {t[2]}
-          </span>
-        ))}
+    <div className="ticker" role="marquee" aria-label="Airport activity">
+      <div className="ticker-label">LIVE</div>
+      <div className="ticker-viewport">
+        <div className="ticker-track" style={{ animationDuration: `${Math.max(40, items.length * 7)}s` }}>
+          {loop.map((t, i) => (
+            <span className="ticker-item" key={i} aria-hidden={i >= items.length}>
+              <span className={t.tone}>{t.tag}</span> <b>{t.title}</b> <span className="mute">·</span> {t.detail}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );
